@@ -1,3 +1,4 @@
+
 # loading libraries
 library(tidyverse)
 library(RColorBrewer)
@@ -13,9 +14,9 @@ library(plotROC)
 library(pROC)
 library(sva)
 
-############################## Input ##############################
+# input -------------------------------------------------------------------
 # defaule parameters: quantification_file = 'Quantification.txt', protein_file = 'Protein.list.txt', sample_file = 'Sample.list.txt'
-filein <- function(quantification_pattern = 'NULL', protein_file = 'Protein.list.txt', sample_file = 'Sample.list.txt'){
+filein <- function(quantification_pattern = 'NULL',protein_file = 'Protein.list.txt', sample_file = 'Sample.list.txt'){
   if (quantification_pattern == 'NULL') {
     cat("Please specify parameter 'quantification_pattern' to add quantification files.")
   } else {
@@ -59,7 +60,7 @@ filein <- function(quantification_pattern = 'NULL', protein_file = 'Protein.list
   }
 }
 
-############################## CV ##############################
+# CV ----------------------------------------------------------------------
 # CV calculation
 CVcal <- function(data_input = raw_data){
   # raw data assessment (CV)
@@ -168,7 +169,7 @@ CVtop <- function(data_input = CV, topN = 20){
   plot_grid(CV_bar_1, CV_bar_2, CV_bar_3, nrow = 1)
 }
 
-############################## quality control ##############################
+# quality control ---------------------------------------------------------
 # data for analysis (several options)
 data4analysis <- function(data_input = raw_data, option = 'NULL'){
   # normalization & reshape
@@ -223,7 +224,7 @@ negcontrol <- function(data_input = Dvalue, type = 'NULL'){
   }
 }
 
-############################## batch effect adjustment ##############################
+# batch effect adjustment --------------------------------------------------
 batch_adjust <- function(proein_expression = MatrixQ, phenotype = sample_list, type = 'NULL'){
   # load data
   pheno <- phenotype%>%
@@ -277,7 +278,7 @@ batch_adjust <- function(proein_expression = MatrixQ, phenotype = sample_list, t
   }
 }
 
-############################## error control ##############################
+# error control -----------------------------------------------------------
 # initial distribution
 # data_input = normalizated_data, xinter = 0
 initialdist <- function(data_input = MatrixQ_ajusted, xinter = 0, xinter_min, xinter_max){
@@ -381,7 +382,7 @@ fdr2log <- function(xrange_max, fdr_threshold = 0.5, type = 'NULL'){
   } else {cat("Please add parameter 'type' to display the data.")}
 }
 
-############################## heatmap ##############################
+# heatmap -----------------------------------------------------------------
 # data_input = Analog2, type = 'global|sample', sample_cluster = T/F
 Analog2heat <- function(data_input = Analog2, type = 'NULL', sample_cluster = 'NULL', protein_cluster = 'NULL'){
   data4heat <- data_input
@@ -402,7 +403,7 @@ Analog2heat <- function(data_input = Analog2, type = 'NULL', sample_cluster = 'N
   } else {cat("Please add parameter 'type' to display the data.")}
 }
 
-############################## k-means ##############################
+# k-means -----------------------------------------------------------------
 # protein scale
 # default parameters: data_input = Analog2
 scale4prot <- function(data_input = Analog2){
@@ -462,52 +463,8 @@ kmeansCluster <- function(data_input = data_scale, kmeans_value, type = 'NULL'){
               rect = T)
   } else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 'cluster, dend'.")}
 }
-# # cluster plot
-# # data_input = data_scale, kmeans_value = 3, type = 'id|group'
-# clusterplot <- function(data_input = data_scale, kmeans_value, type = 'NULL'){
-#   K <- kmeans(data_input, kmeans_value, nstart = 24)
-#   # add ID
-#   data_scale <- tibble::rownames_to_column(data_input, var = 'Protein')
-#   # add cluster
-#   data_scale$group <- K$cluster
-#   if (type == 'id') {
-#     ProteinbyID <- gather(data_scale, 'variable', 'value', -c(Protein, group))
-#     anno <- dplyr::select(sample_list, variable = ID, Group)
-#     ProteinsumID <- group_by(ProteinbyID, group, variable)%>%
-#       dplyr::summarise(value = mean(value))%>%
-#       inner_join(anno, by = 'variable')
-#     ggplot() +
-#       geom_line(data = ProteinbyID, aes(variable, value, group = Protein), color = 'grey') +
-#       geom_line(data = ProteinsumID, aes(variable, value, group = 1, color = Group), size = 1) +
-#       theme_bw() +
-#       theme(legend.position = 'none',
-#             axis.text.x = element_text(angle = 45, hjust = 1)) +
-#       scale_color_brewer(palette = 'Set1') +
-#       facet_grid(group ~ Group, scales = 'free_y') +
-#       labs(x = NULL,
-#            y = 'Scaled value')
-#   } else if (type == 'group') {
-#     Proteinbygroup <- gather(data_scale, 'variable', 'value', -c(Protein, group))%>%
-#       separate(variable, c('prefix', 'suffix'), sep = '-', remove = F)%>%
-#       group_by(group, Protein, prefix)%>%
-#       dplyr::summarise(value = mean(value))
-#     Proteinsumgroup <- group_by(Proteinbygroup, group, prefix)%>%
-#       dplyr::summarise(value = mean(value))%>%
-#       ungroup()%>%
-#       dplyr::mutate(group = as.character(group))
-#     ggplot() +
-#       geom_line(data = Proteinbygroup, aes(prefix, value, group = Protein), color = 'grey') +
-#       geom_line(data = Proteinsumgroup, aes(prefix, value, group = 1, color = group), size = 1) +
-#       facet_wrap(~group, ncol = 1, scales = 'free_y') +
-#       theme_bw() +
-#       theme(legend.position = 'none') +
-#       scale_color_brewer(palette = 'Set1') +
-#       labs(x = NULL,
-#            y = 'Scaled value')
-#   } else cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 'df, group'.")
-# }
 
-############################## PCA ##############################
+# principal components analysis (PCA) -------------------------------------
 # PCA_normal+circle
 # data_input = Analog2, type = 'both|group|IAlias'
 PCAplot <- function(data_input = Analog2, type = 'NULL'){
@@ -597,7 +554,8 @@ PCAdeep <- function(data_input = Analog2, type = 'NULL', group = 'NULL'){
              cl.cex = 0.5)
   } else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 'data, eigenvalue, variables, individuals, correlation'.")}
 }
-############################## differences between groups ##############################
+
+# differences between groups ----------------------------------------------
 # wilcoxon test
 # data_input = raw_data, object = c('A_BL', 'C_PD'), p_threshold = 0.05, fc_threshold = 0, test = 'nonpar|Ttest', type = 'data|plot'
 diffTest <- function(data_input = Analog2, anno_input = raw_data, object, p_threshold = 0.05, fc_threshold = 0, test = 'nonpar', type = 'NULL'){
@@ -685,7 +643,7 @@ diffplot <- function (candiProtein = 'NULL', object = 'NULL', type = 'NULL') {
   } else {cat("Please input correct paremeters!\nIf 'type' is 'boxplot', please specify 'candiProtein' and 'object'.\nIf 'type' is 'waterfall', please specify 'candiProtein'.")}
 }
 
-############################## model construction and evaluation ##############################
+# model construction and evaluation ---------------------------------------
 # all subsets regression model: multivariable
 # data_input = Analog2, protein_personalized = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), class = 'Group|Subgroup1|Subgroup2|NULL'
 regModel <- function(data_input = Analog2, protein_personalized = 'NULL', class = 'NULL'){
@@ -879,7 +837,8 @@ AUC_combind_plot <- function(data_input = Analog2, annotation = sample_list, obj
     return(AUC_coms)
   }
 }
-##############################  multiple regression ##############################
+
+# multiple regression -----------------------------------------------------
 # multiple regression analysis
 # group = c('Group', 'Subgroup1', 'Subgroup2')
 multireg_analysis <- function(data_input = Analog2, annotation = sample_list, group = 'NULL'){
@@ -935,8 +894,3 @@ mulregressoin_pvalue <- function(data_input = mulregressoin, pvalue = 0.05){
     labs(x = NULL,
          y = '-ln(protein)')
 }
-
-
-
-
-
