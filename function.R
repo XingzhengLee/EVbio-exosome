@@ -61,7 +61,7 @@ file.in <- function(quantification_pattern = 'NULL', protein_file = 'Protein.lis
       )%>%
       # sample annotation
       inner_join(sample_list, by = c('Batch', 'Block'))%>%
-      dplyr::select(Batch, Block, Column, Row, SampleID, ID, Group, Protein, fluorescence_F, fluorescence_B, fluorescence_FT, everything())%>%
+      dplyr::select(Batch, Block, Column, Row, SampleID, SampleName, Group, Protein, fluorescence_F, fluorescence_B, fluorescence_FT, everything())%>%
       mutate(Block = as.factor(Block))
     return(raw_data)
   }
@@ -93,7 +93,7 @@ CV.violin <- function(type = 'NULL'){
   if (type == 'CV_F' | type == 'CV_B' | type == 'CV_FT'){
     col_Set2 <- brewer.pal(8, 'Set2')
     sample_num <- nrow(distinct(CV, Block))
-    col_violin <- rep(col_violin[1:3], sample_num)
+    col_violin <- rep(col_Set2[1:3], sample_num)
     plot_suffix <- list(
       geom_violin(aes(fill = Block), trim = F),
       geom_boxplot(width = 0.1),
@@ -106,7 +106,7 @@ CV.violin <- function(type = 'NULL'){
       scale_fill_manual(values = col_violin)
     )
     CV%>%
-      select(Batch, Block, value = type)%>%
+      dplyr::select(Batch, Block, value = type)%>%
       ggplot(aes(Block, value, group = Block)) +
       labs(y = type) +
       plot_suffix
@@ -115,48 +115,38 @@ CV.violin <- function(type = 'NULL'){
 # CV top
 # default parameter: data_input = CV, topN = 20
 CV.top <- function(data_input = CV, topN = 20){
-  CVadd <- unite(
-    CV,
-    # unite Sample (block) and Protein name
-    Batch_Block_Protein, c('Batch', 'Block', 'Protein'), sep = '_', remove = F)
-  # CVF532 top20
-  TopCVF532 <- arrange(CVadd, -CVF532)%>%
+  # unite Sample (block) and Protein name
+  CVadd <- data_input%>%
+    unite(Batch_Block_Protein, c('Batch', 'Block', 'Protein'), sep = '_', remove = F)
+  # CV_F top20
+  TopCV_F <- CVadd%>%
+    arrange(desc(CV_F))%>%
     dplyr::slice(1:topN)
-  TopCVF532 <- dplyr::mutate(TopCVF532, Batch_Block_Protein = factor(Batch_Block_Protein, levels = TopCVF532$Batch_Block_Protein))
-  # CVB532 top20
-  TopCVB532 <- arrange(CVadd, -CVB532)%>%
+  # CV_B top20
+  TopCV_B <-CVadd%>%
+    arrange(desc(CV_B))%>%
     dplyr::slice(1:topN)
-  TopCVB532 <- dplyr::mutate(TopCVB532, Batch_Block_Protein = factor(Batch_Block_Protein, levels = TopCVB532$Batch_Block_Protein))
-  # CVF532T top20
-  TopCVF532T <- arrange(CVadd, -CVF532T)%>%
+  # CV_FT top20
+  TopCV_FT <- CVadd%>%
+    arrange(CV_FT)%>%
     dplyr::slice(1:topN)
-  TopCVF532T <- dplyr::mutate(TopCVF532T, Batch_Block_Protein = factor(Batch_Block_Protein, levels = TopCVF532T$Batch_Block_Protein))
-  # plot
-  bar_col <- brewer.pal(8, 'Set2')
-  CV_bar_1 <- ggplot(
-    TopCVF532,
-    aes(Batch_Block_Protein, CVF532, fill = Batch_Block_Protein)) +
-    geom_bar(stat = 'identity', color = 'black') +
-    theme_minimal() +
-    theme(legend.position = 'none') +
-    scale_fill_manual(values = rep(bar_col[1:3], nrow(TopCVF532))) +
-    coord_flip()
-  CV_bar_2 <- ggplot(
-    TopCVB532,
-    aes(Batch_Block_Protein, CVB532, fill = Batch_Block_Protein)) +
-    geom_bar(stat = 'identity', color = 'black') +
-    theme_minimal() +
-    theme(legend.position = 'none') +
-    scale_fill_manual(values = rep(bar_col[1:3], nrow(TopCVB532))) +
-    coord_flip()
-  CV_bar_3 <- ggplot(
-    TopCVF532T,
-    aes(Batch_Block_Protein, CVF532T, fill = Batch_Block_Protein)) +
-    geom_bar(stat = 'identity', color = 'black') +
-    theme_minimal() +
-    theme(legend.position = 'none') +
-    scale_fill_manual(values = rep(bar_col[1:3], nrow(TopCVF532T))) +
-    coord_flip()
+  # bar plot
+  plot_suffix <- list(
+    geom_bar(stat = 'identity', fill = 'grey', color = 'grey50'),
+    theme_minimal(),
+    theme(legend.position = 'none'),
+    coord_flip(),
+    labs(x = 'Batch_Block_Protein')
+  )
+  CV_bar_1 <- TopCV_F%>%
+    ggplot(aes(reorder(Batch_Block_Protein, CV_F), CV_F)) +
+    plot_suffix
+  CV_bar_2 <- TopCV_B%>%
+    ggplot(aes(reorder(Batch_Block_Protein, CV_B), CV_B)) +
+    plot_suffix
+  CV_bar_3 <- TopCV_FT%>%
+    ggplot(aes(reorder(Batch_Block_Protein, CV_FT), CV_FT)) +
+    plot_suffix
   plot_grid(CV_bar_1, CV_bar_2, CV_bar_3, nrow = 1)
 }
 
