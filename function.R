@@ -1,5 +1,5 @@
 
-# loading libraries
+# load libraries ----------------------------------------------------------
 library(tidyverse)
 library(RColorBrewer)
 library(cowplot)
@@ -15,7 +15,7 @@ library(pROC)
 library(sva)
 
 # input -------------------------------------------------------------------
-# defaule parameters: quantification_file = 'Quantification.txt', protein_file = 'Protein.list.txt', sample_file = 'Sample.list.txt'
+# defaule parameters: quantification_file = 'Quantification.txt', protein_file = 'Protein.list.txt', sample_file = 'Sample.list.txt', fluorescence_label = '635'
 file.in <- function(quantification_pattern = 'NULL', protein_file = 'Protein.list.txt', sample_file = 'Sample.list.txt', fluorescence_label = '635'){
   if (quantification_pattern == 'NULL') {
     cat("Please specify parameter 'quantification_pattern' to add quantification files.")
@@ -61,75 +61,60 @@ file.in <- function(quantification_pattern = 'NULL', protein_file = 'Protein.lis
       )%>%
       # sample annotation
       inner_join(sample_list, by = c('Batch', 'Block'))%>%
-      dplyr::select(Batch, Block, Column, Row, SampleID, ID, Group, Protein, fluorescence_F, fluorescence_B, fluorescence_FT, everything())
+      dplyr::select(Batch, Block, Column, Row, SampleID, ID, Group, Protein, fluorescence_F, fluorescence_B, fluorescence_FT, everything())%>%
+      mutate(Block = as.factor(Block))
     return(raw_data)
   }
 }
 
 # CV ----------------------------------------------------------------------
 # CV calculation
-CVcal <- function(data_input = raw_data){
+CV.cal <- function(data_input = raw_data){
   # raw data assessment (CV)
-  CV <<- filter(
-    data_input,
-    # remove '+' and 'PBS'
-    !(Protein %in% c('+', 'PBS')),
-    Group != 'PBS')%>%
+  CV <<- data_input%>%
+    filter(
+      # remove '+' and 'PBS'
+      !(Protein %in% c('+', 'PBS')),
+      Group != 'PBS'
+    )%>%
     # CV calculation
     dplyr::group_by(Batch, Block, Protein)%>%
     dplyr::summarise(
-      CVF532=sd(F532)/mean(F532),
-      CVB532=sd(B532)/mean(B532),
-      CVF532T=sd(F532T)/mean(F532T))%>%
-    ungroup()%>%
-    mutate(Block = as.factor(Block))
+      CV_F = sd(fluorescence_F)/mean(fluorescence_F),
+      CV_B = sd(fluorescence_B)/mean(fluorescence_B),
+      CV_FT = sd(fluorescence_FT)/mean(fluorescence_FT)
+    )%>%
+    ungroup()
   return(CV)
 }
 # CV violin
-# default parameters: data_input = raw_data, type = 'F532|B532|F532T'
-CVviolin <- function(plot = 'NULL'){
-  violin_col <- brewer.pal(8, 'Set2')
-  sample_num <- distinct(CV, Block)%>%
-    nrow()
-  if (plot == 'F532') {
-    ggplot(
-      CV,
-      aes(Block, CVF532, group = Block)) +
-      geom_violin(aes(fill = Block), trim = F) +
-      geom_boxplot(width = 0.1) +
-      facet_wrap(~Batch, ncol = 1) +
-      theme_bw() +
-      theme(legend.position = 'none',
-            panel.grid.major.x = element_blank()) +
-      scale_fill_manual(values = rep(violin_col[1:3], sample_num))
-  } else if (plot == 'B532') {
-    ggplot(
-      CV,
-      aes(Block, CVB532, group = Block)) +
-      geom_violin(aes(fill = Block), trim = F) +
-      geom_boxplot(width = 0.1) +
-      facet_wrap(~Batch, ncol = 1) +
-      theme_bw() +
-      theme(legend.position = 'none',
-            panel.grid.major.x = element_blank()) +
-      scale_fill_manual(values = rep(violin_col[1:3], sample_num))
-  } else if (plot == 'F532T') {
-    ggplot(
-      CV,
-      aes(Block, CVF532T, group = Block)) +
-      geom_violin(aes(fill = Block), trim = F) +
-      geom_boxplot(width = 0.1) +
-      facet_wrap(~Batch, ncol = 1) +
-      theme_bw() +
-      theme(legend.position = 'none',
-            panel.grid.major.x = element_blank()) +
-      scale_fill_manual(values = rep(violin_col[1:3], sample_num))
-  }
-  else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 'F532, B532'.")}
+# default parameters: data_input = raw_data, type = 'CV_F|CV_B|CV_FT'
+CV.violin <- function(type = 'NULL'){
+  if (type == 'CV_F' | type == 'CV_B' | type == 'CV_FT'){
+    col_Set2 <- brewer.pal(8, 'Set2')
+    sample_num <- nrow(distinct(CV, Block))
+    col_violin <- rep(col_violin[1:3], sample_num)
+    plot_suffix <- list(
+      geom_violin(aes(fill = Block), trim = F),
+      geom_boxplot(width = 0.1),
+      facet_wrap(~Batch, ncol = 1),
+      theme_minimal(),
+      theme(
+        legend.position = 'none',
+        panel.grid.major.x = element_blank()
+      ),
+      scale_fill_manual(values = col_violin)
+    )
+    CV%>%
+      select(Batch, Block, value = type)%>%
+      ggplot(aes(Block, value, group = Block)) +
+      labs(y = type) +
+      plot_suffix
+  } else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 'CV_F, CV_B, CV_FT'.")}
 }
 # CV top
 # default parameter: data_input = CV, topN = 20
-CVtop <- function(data_input = CV, topN = 20){
+CV.top <- function(data_input = CV, topN = 20){
   CVadd <- unite(
     CV,
     # unite Sample (block) and Protein name
