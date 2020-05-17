@@ -16,13 +16,12 @@ library(sva)
 
 # input -------------------------------------------------------------------
 # defaule parameters: quantification_file = 'Quantification.txt', protein_file = 'Protein.list.txt', sample_file = 'Sample.list.txt'
-filein <- function(quantification_pattern = 'NULL',protein_file = 'Protein.list.txt', sample_file = 'Sample.list.txt'){
+file.in <- function(quantification_pattern = 'NULL', protein_file = 'Protein.list.txt', sample_file = 'Sample.list.txt', fluorescence_label = '635'){
   if (quantification_pattern == 'NULL') {
     cat("Please specify parameter 'quantification_pattern' to add quantification files.")
   } else {
     # protein list annotation
-    protein_list <<- read.table(protein_file, encoding = 'UTF-8', sep = '\t', stringsAsFactors = F)%>%
-      tbl_df()%>%
+    protein_list <<- read_tsv(protein_file, col_names = F)%>%
       # add rows and cols (coordinate)
       dplyr::mutate(Row = row_number())%>%
       gather(Column, Protein, -Row)%>%
@@ -30,32 +29,39 @@ filein <- function(quantification_pattern = 'NULL',protein_file = 'Protein.list.
         Column = str_sub(Column, 2),
         Column = as.integer(Column))
     # sample list annotation
-    sample_list <<- read.table(sample_file, encoding = 'UTF-8', header = T, stringsAsFactors = F)%>%
-      tbl_df()
+    sample_list <<- read_tsv(
+      sample_file,
+      # returns the currently used default encoding
+      locale = locale(
+        encoding = stringi::stri_enc_get()
+      )
+    )
     # quantification raw data
     Qlist <- list.files(pattern = quantification_pattern)
     quantification <- data.frame()
     for (i in 1:length(Qlist)) {
-      Q_single <- read.table(Qlist[i], encoding = 'UTF-8', header = T,  comment.char = "", sep = '\t',  check.names = F, stringsAsFactors = F)%>%
-        tbl_df()%>%
-        dplyr::select(Block,
-                      Column,
-                      Row,
-                      F532 = 'F532 Median',
-                      B532,
-                      F532T = 'F532 Total Intensity')%>%
+      Q_single <- read_tsv(Qlist[i])%>%
+        dplyr::select(
+          Block,
+          Column,
+          Row,
+          fluorescence_F = str_c('F', fluorescence_label, ' Median'),
+          fluorescence_B = str_c('B', fluorescence_label),
+          fluorescence_FT = str_c('F', fluorescence_label, ' Total Intensity')
+        )%>%
         mutate(Batch = i)
       quantification <- bind_rows(quantification, Q_single)%>%
         tbl_df()
     }
     # raw data annotation (conbine data)
-    raw_data <<- inner_join(
-      quantification,
-      # protein annotation
-      protein_list, by = c('Row', 'Column'))%>%
+    raw_data <<- quantification%>%
+      inner_join(
+        # protein annotation
+        protein_list, by = c('Row', 'Column')
+      )%>%
       # sample annotation
       inner_join(sample_list, by = c('Batch', 'Block'))%>%
-      dplyr::select(Batch, Block, Column, Row, IID, ID, Group, IAlias, Protein, F532, B532, F532T, everything())
+      dplyr::select(Batch, Block, Column, Row, SampleID, ID, Group, Protein, fluorescence_F, fluorescence_B, fluorescence_FT, everything())
     return(raw_data)
   }
 }
