@@ -189,6 +189,7 @@ neg.control <- function(data_input = Dvalue){
   # data correction
   normalizated_data <<- inner_join(block_positive, correction4protein, by = c('Batch', 'Protein'))%>%
     inner_join(correction4block, by = c('Batch', 'Block'))%>%
+    # normalize for protein & block
     dplyr::mutate(norvalue = avg - avg_negative4protein - avg_negative4block)%>%
     dplyr::filter(!(Protein %in% c('PBS', '+')))%>%
     dplyr::select(-starts_with('avg'))
