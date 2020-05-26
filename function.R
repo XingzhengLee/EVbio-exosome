@@ -118,19 +118,7 @@ CV.top <- function(data_input = CV, topN = 20){
   # unite Sample (block) and Protein name
   CVadd <- data_input%>%
     unite(Batch_Block_Protein, c('Batch', 'Block', 'Protein'), sep = '_', remove = F)
-  # CV_F top20
-  TopCV_F <- CVadd%>%
-    arrange(desc(CV_F))%>%
-    dplyr::slice(1:topN)
-  # CV_B top20
-  TopCV_B <-CVadd%>%
-    arrange(desc(CV_B))%>%
-    dplyr::slice(1:topN)
-  # CV_FT top20
-  TopCV_FT <- CVadd%>%
-    arrange(CV_FT)%>%
-    dplyr::slice(1:topN)
-  # bar plot
+  # bar plot parameters
   plot_suffix <- list(
     geom_bar(stat = 'identity', fill = 'grey', color = 'grey50'),
     theme_minimal(),
@@ -138,39 +126,47 @@ CV.top <- function(data_input = CV, topN = 20){
     coord_flip(),
     labs(x = 'Batch_Block_Protein')
   )
-  CV_bar_1 <- TopCV_F%>%
-    ggplot(aes(reorder(Batch_Block_Protein, CV_F), CV_F)) +
-    plot_suffix
-  CV_bar_2 <- TopCV_B%>%
-    ggplot(aes(reorder(Batch_Block_Protein, CV_B), CV_B)) +
-    plot_suffix
-  CV_bar_3 <- TopCV_FT%>%
-    ggplot(aes(reorder(Batch_Block_Protein, CV_FT), CV_FT)) +
-    plot_suffix
+  # bar function
+  Top_bar <- function(label){
+    TopCV <- CVadd%>%
+      dplyr::rename(value = label)%>%
+      arrange(desc(value))%>%
+      dplyr::slice(1:topN)
+    TopCV%>%
+      ggplot(aes(reorder(Batch_Block_Protein, value), value)) +
+      labs(y = label) +
+      plot_suffix
+  }
+  # plot bar
+  CV_bar_1 <- Top_bar('CV_F')
+  CV_bar_2 <- Top_bar('CV_B')
+  CV_bar_3 <- Top_bar('CV_FT')
   plot_grid(CV_bar_1, CV_bar_2, CV_bar_3, nrow = 1)
 }
 
 # quality control ---------------------------------------------------------
 # data for analysis (several options)
+# data_input = raw_data, option = '1|2|3'
 data4analysis <- function(data_input = raw_data, option = 'NULL'){
   # normalization & reshape
-  value_repeat <- dplyr::group_by(
-    data_input,
-    Block, Protein, 
-    Batch, Block, ID, Group, Protein)%>%
-    # mean value in two replicates
+  value_avg <- data_input%>%
+    dplyr::group_by(Batch, Block, SampleID, Protein)%>%
+    # mean value in two/three replicates
     dplyr::summarise(
-      MF532 = mean(F532),
-      MB532 = mean(B532),
-      MF532T = mean(F532T)
+      mean_F = mean(fluorescence_F),
+      mean_B = mean(fluorescence_B),
+      mean_FT = mean(fluorescence_FT)
     )%>%
     ungroup()
   if (option == 1) {
-    Dvalue <<- dplyr::mutate(value_repeat, Value = MF532 - MB532)
+    Dvalue <<- value_avg%>%
+      dplyr::mutate(avg = mean_F - mean_B)
   } else if (option == 2) {
-    Dvalue <<- dplyr::mutate(value_repeat, Value = MF532)
+    Dvalue <<- value_avg%>%
+      dplyr::mutate(avg = mean_F)
   } else if (option == 3) {
-    Dvalue <<- dplyr::mutate(value_repeat, Value = MF532T)
+    Dvalue <<- value_avg%>%
+      dplyr::mutate(avg = mean_FT)
   } else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 1, 2, 3.")}
   return(Dvalue)
 }
@@ -536,7 +532,7 @@ PCAdeep <- function(data_input = Analog2, type = 'NULL', group = 'NULL'){
   } else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 'data, eigenvalue, variables, individuals, correlation'.")}
 }
 
-# differences between groups ----------------------------------------------
+# differences between groups (single categroy) ----------------------------
 # wilcoxon test
 # data_input = raw_data, object = c('A_BL', 'C_PD'), p_threshold = 0.05, fc_threshold = 0, test = 'nonpar|Ttest', type = 'data|plot'
 diffTest <- function(data_input = Analog2, anno_input = raw_data, object, p_threshold = 0.05, fc_threshold = 0, test = 'nonpar', type = 'NULL'){
@@ -819,7 +815,7 @@ AUC_combind_plot <- function(data_input = Analog2, annotation = sample_list, obj
   }
 }
 
-# multiple regression -----------------------------------------------------
+# multiple regression (multiple categroy) ---------------------------------
 # multiple regression analysis
 # group = c('Group', 'Subgroup1', 'Subgroup2')
 multireg_analysis <- function(data_input = Analog2, annotation = sample_list, group = 'NULL'){
