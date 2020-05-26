@@ -174,7 +174,7 @@ data4analysis <- function(data_input = raw_data, option = 'NULL'){
 }
 # negative control
 # data_input = Dvalue
-neg.control <- function(data_input = Dvalue){
+negative.control <- function(data_input = Dvalue){
   # positive block (filter out 'PBS')
   block_positive <- data_input%>%
     dplyr::filter(SampleID != 'PBS')
@@ -223,56 +223,56 @@ translation2log <- function(data_input = MatrixQ){
 }
 
 # batch effect adjustment --------------------------------------------------
-batch_adjust <- function(proein_expression = MatrixQ, phenotype = sample_list, type = 'NULL'){
+batch_adjust <- function(proein_expression = MatrixQ_log, phenotype = sample_list, type = 'NULL'){
   # load data
   pheno <- phenotype%>%
-    filter(ID != 'PBS')%>%
-    arrange(ID)
+    filter(SampleID != 'PBS')%>%
+    arrange(SampleID)
   edata <- as.matrix(proein_expression)
   # adjusting for batch effects with Combat
   batch <- pheno$Batch
-  modcombat = model.matrix(~1, data = pheno)
-  combat_edata = ComBat(dat = edata, batch = batch, mod = modcombat, par.prior = TRUE, prior.plots = FALSE)
-  MatrixQ_ajusted <<- as.data.frame(combat_edata)
+  modcombat <-  model.matrix(~1, data = pheno)
+  combat_edata <-  ComBat(dat = edata, batch = batch, mod = modcombat, par.prior = TRUE, prior.plots = FALSE)
+  MatrixQ_adjusted <<- as.data.frame(combat_edata)
   # plot preparation
-  anno <- select(pheno, Batch, ID)
-  plot_none <- t(edata)%>%
-    as.data.frame()%>%
-    tibble::rownames_to_column(var = 'ID')%>%
-    tbl_df()%>%
-    gather(protein, value, -ID)%>%
-    left_join(anno, by = 'ID')%>%
-    mutate(Batch = as.factor(Batch),
-           type = 'Before ajustment')
-  plot_ComBat <- t(combat_edata)%>%
-    as.data.frame()%>%
-    tibble::rownames_to_column(var = 'ID')%>%
-    tbl_df()%>%
-    gather(protein, value, -ID)%>%
-    left_join(anno, by = 'ID')%>%
-    mutate(Batch = as.factor(Batch),
-           type = 'ComBat ajustment')
+  anno <- pheno%>%
+    select(Batch, SampleID)
+  pre4plot <- function(data_input, label){
+    as.data.frame(t(data_input))%>%
+      tibble::rownames_to_column(var = 'SampleID')%>%
+      tbl_df()%>%
+      gather(protein, value, -SampleID)%>%
+      left_join(anno, by = 'SampleID')%>%
+      mutate(
+        Batch = as.factor(Batch),
+        type = label
+      )
+  }
+  plot_none <- pre4plot(edata, 'Before adjustment')
+  plot_ComBat <- pre4plot(combat_edata, 'ComBat adjustment')
   plot_bind <- bind_rows(plot_none, plot_ComBat)
   if (type == 'box') {
     ggplot(plot_bind, aes(Batch, value)) +
-    geom_violin(aes(fill = Batch), trim = F) +
-    geom_boxplot(width = 0.1) +
-  theme_test() +
-    theme(legend.position = 'none') +
-    facet_wrap(~type) +
-    scale_fill_brewer(palette = 'Set2') +
-    labs(x = NULL,
-         y = 'Protein quantification')
+      geom_violin(aes(fill = Batch), trim = F) +
+      geom_boxplot(width = 0.1) +
+      theme_minimal() +
+      theme(legend.position = 'none') +
+      facet_wrap(~type) +
+      scale_fill_brewer(palette = 'Spectral') +
+      labs(
+        x = NULL,
+        y = 'Protein quantification'
+      )
   } else if (type == 'density') {
     ggplot(plot_bind, aes(value)) +
-    geom_density(aes(color = Batch), size = 1) +
-    theme_test() +
-    theme(legend.position = 'none') +
-    facet_wrap(~type) +
-    scale_color_brewer(palette = 'Set1') +
-    labs(x = NULL)
+      geom_density(aes(color = Batch), size = 1) +
+      theme_minimal() +
+      theme(legend.position = 'none') +
+      facet_wrap(~type) +
+      scale_color_brewer(palette = 'Spectral') +
+      labs(x = NULL)
   } else if (type == 'data') {
-    return(MatrixQ_ajusted)
+    return(MatrixQ_adjusted)
   }
 }
 
