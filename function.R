@@ -159,46 +159,45 @@ data4analysis <- function(data_input = raw_data, option = 'NULL'){
     )%>%
     ungroup()
   if (option == 1) {
-    Dvalue <<- value_avg%>%
+    Avalue <- value_avg%>%
       dplyr::mutate(avg = mean_F - mean_B)
   } else if (option == 2) {
-    Dvalue <<- value_avg%>%
+    Avalue <- value_avg%>%
       dplyr::mutate(avg = mean_F)
   } else if (option == 3) {
-    Dvalue <<- value_avg%>%
+    Avalue <- value_avg%>%
       dplyr::mutate(avg = mean_FT)
   } else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 1, 2, 3.")}
+  Dvalue <<- Avalue%>%
+    dplyr::select(-starts_with('mean'))
   return(Dvalue)
 }
 # negative control
-# data_input = Dvalue, type = 'all|matrix'
-negcontrol <- function(data_input = Dvalue, type = 'NULL'){
-  # positive block
-  block_positive <- dplyr::filter(data_input, ID != 'PBS')
-  # negative panel (protein correction)
-  correction4protein <- dplyr::filter(data_input, ID == 'PBS')%>%
-    dplyr::select(Batch, Protein, Value_negative4protein = Value)
-  # negative sample in each panel (block correction)
-  correction4block <- dplyr::filter(block_positive, Protein == 'PBS')%>%
-    dplyr::select(Batch, Block, Value_negative4block = Value)
+# data_input = Dvalue
+neg.control <- function(data_input = Dvalue){
+  # positive block (filter out 'PBS')
+  block_positive <- data_input%>%
+    dplyr::filter(SampleID != 'PBS')
+  # negative block (protein correction)
+  correction4protein <- data_input%>%
+    dplyr::filter(SampleID == 'PBS')%>%
+    dplyr::select(Batch, Protein, avg_negative4protein = avg)
+  # negative sample in each block (block correction)
+  correction4block <- block_positive%>%
+    dplyr::filter(Protein == 'PBS')%>%
+    dplyr::select(Batch, Block, avg_negative4block = avg)
   # data correction
   normalizated_data <<- inner_join(block_positive, correction4protein, by = c('Batch', 'Protein'))%>%
     inner_join(correction4block, by = c('Batch', 'Block'))%>%
-    dplyr::mutate(Norvalue = Value - Value_negative4protein)%>%
-    dplyr::filter(!(Protein %in% c('PBS', '+')))
-  # normalizated_data <<- inner_join(block_positive, correction4protein, by = c('Batch', 'Protein'))%>%
-  #   inner_join(correction4block, by = c('Batch', 'Block'))%>%
-  #   dplyr::mutate(Norvalue = Value - Value_negative4protein - Value_negative4block)%>%
-  #   dplyr::filter(!(Protein %in% c('PBS', '+')))
+    dplyr::mutate(norvalue = avg - avg_negative4protein - avg_negative4block)%>%
+    dplyr::filter(!(Protein %in% c('PBS', '+')))%>%
+    dplyr::select(-starts_with('avg'))
   # MartixQ
-  MatrixQ <<- dplyr::select(normalizated_data, ID, Protein, Norvalue)%>%
-    spread(ID, Norvalue)%>%
+  MatrixQ <<- normalizated_data%>%
+    dplyr::select(SampleID, Protein, norvalue)%>%
+    spread(SampleID, norvalue)%>%
     tibble::column_to_rownames(var = 'Protein')
-  if (type == 'all') {
-    return(normalizated_data)
-  } else if (type == 'matrix') {
-    return(head(MatrixQ))
-  }
+  return(MatrixQ)
 }
 
 # batch effect adjustment --------------------------------------------------
