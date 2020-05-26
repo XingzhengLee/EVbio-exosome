@@ -201,6 +201,27 @@ neg.control <- function(data_input = Dvalue){
   return(MatrixQ)
 }
 
+# error control -----------------------------------------------------------
+# the percentage of positive values
+# default parameter: data_input = MatrixQ
+positive.percentage <- function(data_input = MatrixQ){
+  # number of values above zero (percentage)
+  Matrix_TF <- (data_input > 0)
+  num_0 <- table(Matrix_TF)[2]
+  num_all <- length(Matrix_TF)
+  num_percentage <- round(num_0/num_all*100, 2)
+  # print percentage
+  cat(str_c(num_percentage, '% of the original values is positive.'))
+}
+# matrix translation and log transformation
+# default parameter: data_input = MatrixQ
+translation2log <- function(data_input = MatrixQ){
+  # matrix translation
+  MatrixQ_positive <- 1 + data_input - min(data_input)
+  MatrixQ_log <<- log2(MatrixQ_positive)
+  return(MatrixQ_log)
+}
+
 # batch effect adjustment --------------------------------------------------
 batch_adjust <- function(proein_expression = MatrixQ, phenotype = sample_list, type = 'NULL'){
   # load data
