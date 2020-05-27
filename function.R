@@ -277,30 +277,35 @@ batch_adjust <- function(proein_expression = MatrixQ_log, phenotype = sample_lis
 }
 
 # heatmap -----------------------------------------------------------------
-# data_input = Analog2, type = 'global|sample', sample_cluster = T/F
-Analog2heat <- function(data_input = Analog2, type = 'NULL', sample_cluster = 'NULL', protein_cluster = 'NULL'){
+# default parameters:data_input = MatrixQ_log, type = 'global|sample', sample_cluster = T/F
+Matrix2heat <- function(data_input = MatrixQ_log, type = 'NULL', sample_cluster = 'NULL', protein_cluster = 'NULL'){
   data4heat <- data_input
-  data4heat[data4heat == 0] <- NA
   if (type == 'global') {
     if (sample_cluster != 'NULL') {
       # heatmap_global
-      pheatmap(data4heat, border_color = 'white',
-               fontsize = 9, fontsize_row = 10, fontsize_col = 10,
-               cluster_rows = protein_cluster, cluster_cols = sample_cluster)
+      data4heat%>%
+        pheatmap(
+          scale = 'row',
+          border_color = 'white',
+          fontsize = 9, fontsize_row = 10, fontsize_col = 10,
+          cluster_rows = protein_cluster, cluster_cols = sample_cluster
+        )
     } else {cat("Please add parameter 'sample_cluster' (T/F).")}
   } else if (type == 'sample') {
     # sample correlation heatmap
     cor_sample <- cor(data_input, use = 'pairwise.complete.obs')
-    pheatmap(cor_sample,
-             color = rev(inferno(100)), border_color = NA,
-             cluster_rows = T, cluster_cols = T)
+    cor_sample%>%
+      pheatmap(
+        color = rev(inferno(100)), border_color = NA,
+        cluster_rows = T, cluster_cols = T
+      )
   } else {cat("Please add parameter 'type' to display the data.")}
 }
 
 # k-means -----------------------------------------------------------------
 # protein scale
-# default parameters: data_input = Analog2
-scale4prot <- function(data_input = Analog2){
+# default parameters: data_input = MatrixQ_adjusted
+scale4prot <- function(data_input = MatrixQ_adjusted){
   data_scale <<- as.data.frame(t(apply(data_input, 1, scale)))
   colnames(data_scale) <<- colnames(data_input)
   return(data_scale)
@@ -310,7 +315,7 @@ scale4prot <- function(data_input = Analog2){
 kmeanstop <- function(data_input = data_scale) {
   wss <- NA
   for (i in 1:10) {
-    wss[i] <- sum(kmeans(na.omit(data_input), centers = i)$withinss)
+    wss[i] <- sum(kmeans(na.omit(data_input), centers = i, nstart = 24)$withinss)
   }
   as.data.frame(wss)%>%
     dplyr::mutate(cluster = row_number())%>%
