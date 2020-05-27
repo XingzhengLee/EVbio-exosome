@@ -69,6 +69,7 @@ file.in <- function(quantification_pattern = 'NULL', protein_file = 'Protein.lis
 
 # CV ----------------------------------------------------------------------
 # CV calculation
+# default parameters: data_input = raw_data
 CV.cal <- function(data_input = raw_data){
   # raw data assessment (CV)
   CV <<- data_input%>%
@@ -146,7 +147,7 @@ CV.top <- function(data_input = CV, topN = 20){
 
 # quality control ---------------------------------------------------------
 # data for analysis (several options)
-# data_input = raw_data, option = '1|2|3'
+# default parameter: data_input = raw_data, option = '1|2|3'
 data4analysis <- function(data_input = raw_data, option = 'NULL'){
   # normalization & reshape
   value_avg <- data_input%>%
@@ -173,7 +174,7 @@ data4analysis <- function(data_input = raw_data, option = 'NULL'){
   return(Dvalue)
 }
 # negative control
-# data_input = Dvalue
+# default parameter: data_input = Dvalue
 negative.control <- function(data_input = Dvalue){
   # positive block (filter out 'PBS')
   block_positive <- data_input%>%
@@ -202,6 +203,7 @@ negative.control <- function(data_input = Dvalue){
 }
 
 # batch effect adjustment --------------------------------------------------
+# defaule parameters: proein_expression = MatrixQ, phenotype = sample_list, type = 'box|density|data'
 batch_adjust <- function(proein_expression = MatrixQ, phenotype = sample_list, type = 'NULL'){
   # load data
   pheno <- phenotype%>%
@@ -268,7 +270,7 @@ positive.percentage <- function(data_input =  MatrixQ_adjusted){
   cat(str_c(num_percentage, '% of the original values is positive.'))
 }
 # matrix translation and log transformation
-# default parameter: data_input =  MatrixQ_adjusted, drop_percentage
+# default parameter: data_input = MatrixQ_adjusted, drop_percentage
 translation2log <- function(data_input =  MatrixQ_adjusted, drop_percentage){
   # find the threshold based on drop_percentage
   Matrix_vector <- sort(as.vector(as.matrix(data_input)))
@@ -291,7 +293,7 @@ Matrix2heat <- function(data_input = MatrixQ_log, type = 'NULL', sample_cluster 
       # heatmap_global
       data4heat%>%
         pheatmap(
-          scale = 'row',
+          scale = 'none',
           border_color = 'white',
           fontsize = 9, fontsize_row = 10, fontsize_col = 10,
           cluster_rows = protein_cluster, cluster_cols = sample_cluster
@@ -336,7 +338,7 @@ kmeanstop <- function(data_input = data_scale) {
          y = 'Within groups sum of squares')
 }
 # kmeans heatmap
-# data_intput = data_scale, kmeans_value
+# default parameter: data_intput = data_scale, kmeans_value
 kmeansHeat <- function(data_intput = data_scale, kmeans_value){
   Heatmap(na.omit(data_intput), name = "heatmap",
           km = kmeans_value,
@@ -347,7 +349,7 @@ kmeansHeat <- function(data_intput = data_scale, kmeans_value){
           show_row_names = T)
 }
 # kmeans cluster
-# data_input = data_scale, kmeans_value, type = 'cluster|dend'
+# default parameter: data_input = data_scale, kmeans_value, type = 'cluster|dend'
 kmeansCluster <- function(data_input = data_scale, kmeans_value, type = 'NULL'){
   K <- kmeans(na.omit(data_input), kmeans_value, nstart = 24)
   clusterCol <- brewer.pal(9, 'Set1')[1:max(K$cluster)]
@@ -432,86 +434,98 @@ PCAdeep <- function(data_input = MatrixQ_log, type = 'NULL', group = 'NULL'){
 }
 
 # differences between groups (single categroy) ----------------------------
-# wilcoxon test
-# data_input = raw_data, object = c('A_BL', 'C_PD'), p_threshold = 0.05, fc_threshold = 0, test = 'nonpar|Ttest', type = 'data|plot'
-diffTest <- function(data_input = Analog2, anno_input = raw_data, object, p_threshold = 0.05, fc_threshold = 0, test = 'nonpar', type = 'NULL'){
-  # add group annotation
-  annotation <- dplyr::select(anno_input, ID, Group)%>%
-    distinct(ID, .keep_all = T)%>%
-    filter(ID != 'PBS')
-  DEgroup <<- t(data_input)%>%
-    as.data.frame()%>%
-    tibble::rownames_to_column(var = 'ID')%>%
-    left_join(annotation, by = 'ID')
-  DE <<- dplyr::select(DEgroup, -ID)
-  # specify groups for analysis
-  DE4wil <- filter(DE, Group %in% object)
-  # wilcoxon test
+# difference test
+# default parameter: data_input = MatrixQ_log, object = c('A_BL', 'C_PD'), p_threshold = 0.05, fc_threshold = 0, test = 'nonpar|Ttest', type = 'data|plot'
+diff.test <- function(data_input = MatrixQ_log, anno_input = raw_data, category, object, p_threshold = 0.05, fc_threshold = 0, test = 'NULL', type = 'NULL'){
+  # add condition annotation
+  annotation <- anno_input%>%
+    dplyr::select(SampleID, condition = category)%>%
+    distinct(SampleID, .keep_all = T)%>%
+    filter(SampleID != 'PBS')
+  Matrix_anno <- as.data.frame(t(data_input))%>%
+    tibble::rownames_to_column(var = 'SampleID')%>%
+    left_join(annotation, by = 'SampleID')
+  Matrix_ID <- Matrix_anno%>%
+    dplyr::select(-SampleID)
+  # specify conditions for analysis
+  DE4test <- Matrix_ID%>%
+    filter(condition %in% object)
+  # DE test
   diff_test <- data.frame(Protein = NA, p.value = NA, log2FC = NA)
-  for (i in 1:(ncol(DE4wil)-1)) {
+  for (i in 1:(ncol(DE4test)-1)) {
     print(paste('Processing proteins:', i))
     # log2mean
-    data4mean <- dplyr::select(DE4wil, i, ncol(DE4wil))
-    colnames(data4mean) <- c('Value', 'Group')
-    mean <- group_by(data4mean, Group)%>%
-      dplyr::summarise(mean = mean(Value, na.rm = T))
+    data4mean <- DE4test%>%
+      dplyr::select(i, ncol(DE4test))
+    colnames(data4mean) <- c('value', 'condition')
+    mean <- group_by(data4mean, condition)%>%
+      dplyr::summarise(mean = mean(value, na.rm = T))
     logvalue <- log2(mean$mean[2]/mean$mean[1])
     # creat result dataframe
-    if (test == 'nonpar') {
-      diff_test[i,1] <- colnames(DE4wil)[i]
-      diff_test[i,2] <- wilcox.test(DE4wil[,i] ~ DE4wil[,ncol(DE4wil)], data = DE4wil, na.action = na.omit)$p.value
-      diff_test[i,3] <- logvalue
-    } else if (test == 'Ttest') {
-      diff_test[i,1] <- colnames(DE4wil)[i]
-      diff_test[i,2] <- t.test(DE4wil[,i] ~ DE4wil[,ncol(DE4wil)], data = DE4wil, na.action = na.omit)$p.value
-      diff_test[i,3] <- logvalue
-    }
+    diff_test[i,1] <- colnames(DE4test)[i]
+    diff_test[i,2] <- test(DE4test[,i] ~ DE4test[,ncol(DE4test)], data = DE4test, na.action = na.omit)$p.value
+    diff_test[i,3] <- logvalue
   }
   DEP <<- arrange(diff_test, p.value)
   if (type == 'data') {
-    return(diff_test)
+    return(DEP)
   } else if (type == 'plot') {
     # volcano plot
     FCcol <- brewer.pal(9, 'Set1')
-    mutate(
-      diff_test,
-      logP = -log10(p.value),
-      label = case_when(p.value < p_threshold & (log2FC > fc_threshold | log2FC < -fc_threshold) ~ Protein),
-      FoldChange = ifelse(p.value < p_threshold & log2FC > fc_threshold, 'Up',
-                          ifelse(p.value < p_threshold & log2FC < -fc_threshold, 'Down', 'Not'))
-    )%>%
+    diff_test%>%
+      mutate(
+        logP = -log10(p.value),
+        label = case_when(p.value < p_threshold & (log2FC > fc_threshold | log2FC < -fc_threshold) ~ Protein),
+        FoldChange = ifelse(p.value < p_threshold & log2FC > fc_threshold, 'Up',
+                            ifelse(p.value < p_threshold & log2FC < -fc_threshold, 'Down', 'Not'))
+      )%>%
       ggplot(aes(log2FC, logP)) +
       geom_point(aes(color = FoldChange)) +
       geom_vline(xintercept = 0, linetype = 'dashed', color = 'grey50') +
       theme_test() +
-      scale_color_manual(values = c(FCcol[1], 'grey', FCcol[2])) +
+      scale_color_manual(
+        values = c(FCcol[1], 'grey', FCcol[2]),
+        breaks = c('Down', 'Not', 'Up')
+      ) +
       ggrepel::geom_text_repel(aes(label = label), box.padding = 0.1, label.padding = 0.1, point.padding = 0.1)
   } else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 'data, plot'.")}
 }
 # differential protein plot
-# candiProtein: 'CD276', object: c('A_BL', 'C_PD'), type = 'boxplot|waterfall' 
-diffplot <- function (candiProtein = 'NULL', object = 'NULL', type = 'NULL') {
+# defaule parameters: data_input = MatrixQ_log, anno_input = raw_data, category, candiProtein: 'CD276', object: c('A_BL', 'C_PD'), type = 'boxplot|waterfall' 
+diff.plot <- function(data_input = MatrixQ_log, anno_input = raw_data, category, candiProtein = 'NULL', object = 'NULL', type = 'NULL') {
+  # add condition annotation
+  annotation <- anno_input%>%
+    dplyr::select(SampleID, condition = category)%>%
+    distinct(SampleID, .keep_all = T)%>%
+    filter(SampleID != 'PBS')
+  Matrix_anno <- as.data.frame(t(data_input))%>%
+    tibble::rownames_to_column(var = 'SampleID')%>%
+    left_join(annotation, by = 'SampleID')
+  Matrix_ID <- Matrix_anno%>%
+    dplyr::select(-SampleID)
   if (type == 'boxplot') {
     # specify groups for analysis
-    DE4wil <- filter(DE, Group %in% object)
-    data4box <- dplyr::select(DE4wil, candiProtein, Group)
-    colnames(data4box) <- c('Value', 'Group')
-    ggplot(data4box, aes(Group, Value)) +
-      geom_boxplot(aes(color = Group), outlier.color = NA) +
-      geom_jitter(aes(color = Group), width = 0.3, height = 0) +
+    DE4test <- Matrix_ID%>%
+      filter(condition %in% object)
+    data4box <- DE4test%>%
+      dplyr::select(candiProtein, condition)%>%
+      rename(value = candiProtein)
+    ggplot(data4box, aes(condition, value)) +
+      geom_boxplot(aes(color = condition), outlier.color = NA) +
+      geom_jitter(aes(color = condition), width = 0.3, height = 0) +
       theme_test() +
       theme(legend.position = 'none') +
-      scale_color_brewer(palette = 'Set1') +
+      scale_color_brewer(palette = 'Set2') +
       labs(x = NULL,
            y = candiProtein)
   } else if (type == 'waterfall') {
-    data4water <- dplyr::select(DEgroup, ID, Group, candiProtein)
-    colnames(data4water) <- c('ID', 'Group', 'Value')
-    ggplot(data4water, aes(reorder(ID, -Value), Value)) +
-      geom_bar(stat = 'identity', aes(fill = Group)) +
+    data4water <- Matrix_anno%>%
+      dplyr::select(SampleID, condition, candiProtein)%>%
+      rename(value = candiProtein)
+    ggplot(data4water, aes(reorder(SampleID, -value), value)) +
+      geom_bar(stat = 'identity', aes(fill = condition)) +
       theme_classic() +
-      theme(legend.position = c(0.9, 0.8),
-            legend.title = element_blank(),
+      theme(legend.title = element_blank(),
             axis.text.x = element_text(angle = 45, hjust = 1)) +
       scale_fill_brewer(palette = 'Set2') +
       labs(x = NULL,
@@ -521,7 +535,7 @@ diffplot <- function (candiProtein = 'NULL', object = 'NULL', type = 'NULL') {
 
 # model construction and evaluation ---------------------------------------
 # all subsets regression model: multivariable
-# data_input = Analog2, protein_personalized = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), class = 'Group|Subgroup1|Subgroup2|NULL'
+# default parameter: data_input = Analog2, protein_personalized = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), class = 'Group|Subgroup1|Subgroup2|NULL'
 regModel <- function(data_input = Analog2, protein_personalized = 'NULL', class = 'NULL'){
   if (protein_personalized == 'NULL') {
     MM <- data_input
@@ -548,7 +562,7 @@ ModPlot <- function(model_input = leapsReg){
   plot(model_input, scale = "adjr2")
 }
 # model evaluate (ROC): variables from 2 to 10
-# datainput = Analog2, annotation = sample_list, predictor = 10, object = c('A_BL', 'B_PR'), type = 'data|plot|ROCpar', class = 'Group|Subgroup1|Subgroup2|NULL'
+# default parameter: datainput = Analog2, annotation = sample_list, predictor = 10, object = c('A_BL', 'B_PR'), type = 'data|plot|ROCpar', class = 'Group|Subgroup1|Subgroup2|NULL'
 pred4ROC <- function(datainput = Analog2, annotation = sample_list, predictor, object, type = 'NULL', class = 'NULL'){
   # regression parameter
   coefficient <- coef(leapsReg, predictor)
@@ -609,7 +623,7 @@ pred4ROC <- function(datainput = Analog2, annotation = sample_list, predictor, o
   } else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 'data, plot'.")}
 }
 # model evaluate (ROC): personalized
-# data_input = Analog2, annotation = sample_list, protein_candidate = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), class = 'Group|Subgroup1|Subgroup2|NULL', type = 'plot|data'
+# default parameter: data_input = Analog2, annotation = sample_list, protein_candidate = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), class = 'Group|Subgroup1|Subgroup2|NULL', type = 'plot|data'
 AUC_personalized <- function(data_input = Analog2, annotation = sample_list, object, protein_candidate = 'NULL', class = 'NULL', type = 'NULL'){
   anno <- dplyr::select(annotation, ID, class)%>%
     select(class = last_col(), everything())
@@ -647,7 +661,7 @@ AUC_personalized <- function(data_input = Analog2, annotation = sample_list, obj
   }
 }
 # model evaluate (ROC): combind plot
-# data_input = Analog2, annotation = sample_list, protein_candidate = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), class = 'Group|Subgroup1|Subgroup2|NULL', type = 'data|plot'
+# default parameter: data_input = Analog2, annotation = sample_list, protein_candidate = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), class = 'Group|Subgroup1|Subgroup2|NULL', type = 'data|plot'
 AUC_combind_plot <- function(data_input = Analog2, annotation = sample_list, object, protein_candidate = 'NULL', class = 'NULL', type = 'NULL'){
   # single protein
   anno <- dplyr::select(annotation, ID, class)%>%
@@ -716,7 +730,7 @@ AUC_combind_plot <- function(data_input = Analog2, annotation = sample_list, obj
 
 # multiple regression (multiple categroy) ---------------------------------
 # multiple regression analysis
-# group = c('Group', 'Subgroup1', 'Subgroup2')
+# default parameter: group = c('Group', 'Subgroup1', 'Subgroup2')
 multireg_analysis <- function(data_input = Analog2, annotation = sample_list, group = 'NULL'){
   group_name <- group
   anno <- annotation%>%
