@@ -268,8 +268,14 @@ positive.percentage <- function(data_input =  MatrixQ_adjusted){
   cat(str_c(num_percentage, '% of the original values is positive.'))
 }
 # matrix translation and log transformation
-# default parameter: data_input =  MatrixQ_adjusted
-translation2log <- function(data_input =  MatrixQ_adjusted){
+# default parameter: data_input =  MatrixQ_adjusted, drop_percentage
+translation2log <- function(data_input =  MatrixQ_adjusted, drop_percentage){
+  # find the threshold based on drop_percentage
+  Matrix_vector <- sort(as.vector(as.matrix(data_input)))
+  num_all <- length(Matrix_vector)
+  num_vector <- round(num_all*drop_percentage)
+  Matrix_threshold <- Matrix_vector[num_vector]
+  data_input[data_input < Matrix_threshold] <- Matrix_threshold
   # matrix translation
   MatrixQ_positive <- 1 + data_input - min(data_input)
   MatrixQ_log <<- log2(MatrixQ_positive)
