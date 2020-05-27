@@ -201,29 +201,8 @@ negative.control <- function(data_input = Dvalue){
   return(MatrixQ)
 }
 
-# error control -----------------------------------------------------------
-# the percentage of positive values
-# default parameter: data_input = MatrixQ
-positive.percentage <- function(data_input = MatrixQ){
-  # number of values above zero (percentage)
-  Matrix_TF <- (data_input > 0)
-  num_0 <- table(Matrix_TF)[2]
-  num_all <- length(Matrix_TF)
-  num_percentage <- round(num_0/num_all*100, 2)
-  # print percentage
-  cat(str_c(num_percentage, '% of the original values is positive.'))
-}
-# matrix translation and log transformation
-# default parameter: data_input = MatrixQ
-translation2log <- function(data_input = MatrixQ){
-  # matrix translation
-  MatrixQ_positive <- 1 + data_input - min(data_input)
-  MatrixQ_log <<- log2(MatrixQ_positive)
-  return(MatrixQ_log)
-}
-
 # batch effect adjustment --------------------------------------------------
-batch_adjust <- function(proein_expression = MatrixQ_log, phenotype = sample_list, type = 'NULL'){
+batch_adjust <- function(proein_expression = MatrixQ, phenotype = sample_list, type = 'NULL'){
   # load data
   pheno <- phenotype%>%
     filter(SampleID != 'PBS')%>%
@@ -276,6 +255,27 @@ batch_adjust <- function(proein_expression = MatrixQ_log, phenotype = sample_lis
   }
 }
 
+# error control -----------------------------------------------------------
+# the percentage of positive values
+# default parameter: data_input =  MatrixQ_adjusted
+positive.percentage <- function(data_input =  MatrixQ_adjusted){
+  # number of values above zero (percentage)
+  Matrix_TF <- (data_input > 0)
+  num_0 <- table(Matrix_TF)[2]
+  num_all <- length(Matrix_TF)
+  num_percentage <- round(num_0/num_all*100, 2)
+  # print percentage
+  cat(str_c(num_percentage, '% of the original values is positive.'))
+}
+# matrix translation and log transformation
+# default parameter: data_input =  MatrixQ_adjusted
+translation2log <- function(data_input =  MatrixQ_adjusted){
+  # matrix translation
+  MatrixQ_positive <- 1 + data_input - min(data_input)
+  MatrixQ_log <<- log2(MatrixQ_positive)
+  return(MatrixQ_log)
+}
+
 # heatmap -----------------------------------------------------------------
 # default parameters:data_input = MatrixQ_log, type = 'global|sample', sample_cluster = T/F
 Matrix2heat <- function(data_input = MatrixQ_log, type = 'NULL', sample_cluster = 'NULL', protein_cluster = 'NULL'){
@@ -304,8 +304,8 @@ Matrix2heat <- function(data_input = MatrixQ_log, type = 'NULL', sample_cluster 
 
 # k-means -----------------------------------------------------------------
 # protein scale
-# default parameters: data_input = MatrixQ_adjusted
-scale4prot <- function(data_input = MatrixQ_adjusted){
+# default parameters: data_input = MatrixQ_log
+scale4prot <- function(data_input = MatrixQ_log){
   data_scale <<- as.data.frame(t(apply(data_input, 1, scale)))
   colnames(data_scale) <<- colnames(data_input)
   return(data_scale)
@@ -365,37 +365,27 @@ kmeansCluster <- function(data_input = data_scale, kmeans_value, type = 'NULL'){
 
 # principal components analysis (PCA) -------------------------------------
 # PCA_normal+circle
-# data_input = Analog2, type = 'both|group|IAlias'
-PCAplot <- function(data_input = Analog2, type = 'NULL'){
+# defaule parameters: data_input = MatrixQ_log, type = 'Group|Subgroup1|Subgroup2'
+PCAplot <- function(data_input = MatrixQ_log, type = 'NULL'){
   PCA <- prcomp(na.omit(t(data_input)))
-  PC1_importance <- summary(PCA)$importance[2,1]*100
-  PC2_importance <- summary(PCA)$importance[2,2]*100
+  PC1_importance <- round(summary(PCA)$importance[2,1]*100, 2)
+  PC2_importance <- round(summary(PCA)$importance[2,2]*100, 2)
   pcaData <- data.frame(PCA$x[,1:2], check.names = F)%>%
-    tibble::rownames_to_column(var = 'ID')%>%
-    inner_join(sample_list, by = 'ID')
-  if (type == 'Group') {
-    ggplot(pcaData, aes(x = PC1, y = PC2, color = Group)) +
-      geom_point(size = 5, alpha = 2/3) +
-      stat_ellipse(linetype = 'dashed', size = 1) +
-      theme_bw() +
-      scale_color_brewer(palette = 'Set1')
-  } else if (type == 'Subgroup1') {
-    ggplot(pcaData, aes(x = PC1, y = PC2, color = Subgroup1)) +
-      geom_point(size = 5, alpha = 2/3) +
-      stat_ellipse(linetype = 'dashed', size = 1) +
-      theme_bw() +
-      scale_color_brewer(palette = 'Set1')
-  } else if (type == 'Subgroup2') {
-    ggplot(pcaData, aes(x = PC1, y = PC2, color = Subgroup2)) +
-      geom_point(size = 5, alpha = 2/3) +
-      stat_ellipse(linetype = 'dashed', size = 1) +
-      theme_bw() +
-      scale_color_brewer(palette = 'Set1')
-  } else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 'both, group, IAlias'.")}
+    tibble::rownames_to_column(var = 'SampleID')%>%
+    inner_join(sample_list, by = 'SampleID')%>%
+    rename(condition = type)
+  ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
+    geom_point(size = 5, alpha = 2/3) +
+    stat_ellipse(linetype = 'dashed', size = 1) +
+    theme_bw() +
+    scale_color_brewer(palette = 'Set1') +
+    guides(color = guide_legend(title = type)) +
+    labs(x = str_c('PC1 (', PC1_importance, '%)'),
+         y = str_c('PC1 (', PC2_importance, '%)'))
 }
 # PCA_deep
-# data_input = Analog2, type = 'data|eigenvalue|variables|individuals|correlation|both'
-PCAdeep <- function(data_input = Analog2, type = 'NULL', group = 'NULL'){
+# defaule parameters: data_input = MatrixQ_log, type = 'data|eigenvalue|variables|individuals|correlation|both', group = 'Group|Subgroup1|Subgroup2'
+PCAdeep <- function(data_input = MatrixQ_log, type = 'NULL', group = 'NULL'){
   PCA <- prcomp(na.omit(t(data_input)))
   if (type == 'data') {
     get_eigenvalue(PCA)
@@ -409,39 +399,6 @@ PCAdeep <- function(data_input = Analog2, type = 'NULL', group = 'NULL'){
     fviz_pca_var(PCA,
                  col.var = "contrib",
                  gradient.cols = brewer.pal(11, "Spectral"))
-  } else if (type == 'individuals') {
-    dt <- na.omit(t(data_input))
-    dt_anno <- as.data.frame(dt)%>%
-      tibble::rownames_to_column(var = 'ID')%>%
-      left_join(sample_list, by = 'ID')
-    if (group == 'Group') {
-      fviz_pca_ind(prcomp(dt),
-                   geom.ind = "point",
-                   col.ind = dt_anno$Group,
-                   palette = brewer.pal(9, "Set1")[1:length(unique(dt_anno$Group))],
-                   # whether to use ggrepel to avoid overplotting text labels
-                   repel = T,
-                   addEllipses = T,
-                   legend.title = "Groups")
-    } else if (group == 'Subgroup1') {
-      fviz_pca_ind(prcomp(dt),
-                   geom.ind = "point",
-                   col.ind = dt_anno$Subgroup1,
-                   palette = brewer.pal(9, "Set1")[1:length(unique(dt_anno$Subgroup1))],
-                   # whether to use ggrepel to avoid overplotting text labels
-                   repel = T,
-                   addEllipses = T,
-                   legend.title = "Groups")
-    } else if (group == 'Subgroup2') {
-      fviz_pca_ind(prcomp(dt),
-                   geom.ind = "point",
-                   col.ind = dt_anno$Subgroup2,
-                   palette = brewer.pal(9, "Set1")[1:length(unique(dt_anno$Subgroup2))],
-                   # whether to use ggrepel to avoid overplotting text labels
-                   repel = T,
-                   addEllipses = T,
-                   legend.title = "Groups")
-    }
   } else if (type == 'correlation') {
     var <- get_pca_var(PCA)
     corrplot(var$cos2, is.corr = FALSE,
@@ -451,6 +408,20 @@ PCAdeep <- function(data_input = Analog2, type = 'NULL', group = 'NULL'){
              tl.col = 'grey20',
              cl.pos = 'b',
              cl.cex = 0.5)
+  } else if (type == 'individuals') {
+    dt <- na.omit(t(data_input))
+    dt_anno <- as.data.frame(dt)%>%
+      tibble::rownames_to_column(var = 'SampleID')%>%
+      left_join(sample_list, by = 'SampleID')%>%
+      rename(condition = group)
+    fviz_pca_ind(prcomp(dt),
+                 geom.ind = "point",
+                 col.ind = dt_anno$condition,
+                 palette = brewer.pal(9, "Set1")[1:length(unique(dt_anno$condition))],
+                 # whether to use ggrepel to avoid overplotting text labels
+                 repel = T,
+                 addEllipses = T,
+                 legend.title = group)
   } else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 'data, eigenvalue, variables, individuals, correlation'.")}
 }
 
