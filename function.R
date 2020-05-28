@@ -433,6 +433,22 @@ PCAdeep <- function(data_input = MatrixQ_log, type = 'NULL', group = 'NULL'){
   } else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 'data, eigenvalue, variables, individuals, correlation'.")}
 }
 
+# sub group ---------------------------------------------------------------
+# defaule parameters: data_input = MatrixQ_log, annotation = sample_list, category_main = 'Group', object_main = c('SD', 'BL')
+Matrix.sub <- function(data_input = MatrixQ_log, annotation = sample_list, category_main, object_main){
+  # add condition annotation
+  annotation <- annotation%>%
+    dplyr::select(SampleID, condition = category_main)%>%
+    dplyr::filter(condition %in% object_main)%>%
+    distinct(SampleID, .keep_all = T)%>%
+    filter(SampleID != 'PBS')
+  # subset
+  ID_sub <- annotation$SampleID
+  MatrixQ_sub <<- data_input%>%
+    dplyr::select(ID_sub)
+  return(MatrixQ_sub)
+}
+
 # differences between groups (single categroy) ----------------------------
 # difference test
 # default parameter: data_input = MatrixQ_log, object = c('A_BL', 'C_PD'), p_threshold = 0.05, fc_threshold = 0, test = 'nonpar|Ttest', type = 'data|plot'
@@ -742,60 +758,3 @@ AUC.combind.plot <- function(data_input = MatrixQ_log, annotation = sample_list,
     return(AUC_coms)
   }
 }
-
-# multiple regression (multiple categroy) ---------------------------------
-# multiple regression analysis
-# default parameter: group = c('Group', 'Subgroup1', 'Subgroup2')
-# multireg_analysis <- function(data_input = Analog2, annotation = sample_list, group = 'NULL'){
-#   group_name <- group
-#   anno <- annotation%>%
-#     select(ID, group_name)
-#   df_anno <- data_input%>%
-#     t()%>%
-#     as.data.frame()%>%
-#     tibble::rownames_to_column(var = 'ID')%>%
-#     tbl_df()%>%
-#     left_join(anno, by = 'ID')%>%
-#     select(group_name, everything(),
-#            -ID)
-#   group_number <- length(group_name)
-#   mulregressoin <<- matrix(ncol = 1 + group_number, nrow = 0)%>%
-#     as.data.frame()
-#   colnames(mulregressoin) <<- c('protein', group_name)
-#   for (i in (group_number+1):length(df_anno)) {
-#     df4avo <- select(df_anno, 1:3, i)
-#     protein4test <- colnames(df_anno)[i]
-#     fit <- aov(as.formula(paste(protein4test, '.', sep = " ~ ")), data = df4avo)
-#     p.table <- summary(fit)[[1]]%>%
-#       as.data.frame()%>%
-#       tibble::rownames_to_column(var = 'group')%>%
-#       mutate(group = str_trim(group))
-#     rowID <- i-group_number
-#     mulregressoin[rowID,1] <<- protein4test
-#     mulregressoin[rowID,2] <<- p.table%>%
-#       filter(group == group_name[1])%>%
-#       .[6]
-#     mulregressoin[rowID,3] <<- p.table%>%
-#       filter(group == group_name[2])%>%
-#       .[6]
-#     mulregressoin[rowID,4] <<- p.table%>%
-#       filter(group == group_name[3])%>%
-#       .[6]
-#   }
-#   return(mulregressoin)
-# }
-# multiple regression pvalue plot
-# mulregressoin_pvalue <- function(data_input = mulregressoin, pvalue = 0.05){
-#   data_input%>%
-#     gather(group, value, -protein)%>%
-#     mutate(ln = -log(value),
-#            label = case_when(value < pvalue ~ protein))%>%
-#     ggplot(aes(group, ln, color = group)) +
-#     geom_jitter(height = 0) +
-#     geom_hline(yintercept = -log(pvalue), color = 'grey50', linetype = 'dashed') +
-#     theme_test() +
-#     theme(legend.position = 'none') +
-#     scale_color_brewer(palette = 'Set1') +
-#     labs(x = NULL,
-#          y = '-ln(protein)')
-# }
