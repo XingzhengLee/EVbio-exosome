@@ -188,7 +188,7 @@ negative.control <- function(data_input = Dvalue){
     dplyr::filter(Protein == 'PBS')%>%
     dplyr::select(Batch, Block, avg_negative4block = avg)
   # data correction
-  normalizated_data <<- inner_join(block_positive, correction4protein, by = c('Batch', 'Protein'))%>%
+  normalizated_data <- inner_join(block_positive, correction4protein, by = c('Batch', 'Protein'))%>%
     inner_join(correction4block, by = c('Batch', 'Block'))%>%
     # normalize for protein & block
     dplyr::mutate(norvalue = avg - avg_negative4protein - avg_negative4block)%>%
@@ -535,108 +535,121 @@ diff.plot <- function(data_input = MatrixQ_log, anno_input = raw_data, category,
 
 # model construction and evaluation ---------------------------------------
 # all subsets regression model: multivariable
-# default parameter: data_input = Analog2, protein_personalized = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), class = 'Group|Subgroup1|Subgroup2|NULL'
-regModel <- function(data_input = Analog2, protein_personalized = 'NULL', class = 'NULL'){
+# default parameter: data_input = MatrixQ_log, protein_personalized = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), category = 'Group|Subgroup1|Subgroup2|NULL'
+reg.Model <- function(data_input = MatrixQ_log, protein_personalized = 'NULL', category = 'NULL'){
   if (protein_personalized == 'NULL') {
     MM <- data_input
   }
   if (protein_personalized != 'NULL') {
-    MM <- tibble::rownames_to_column(Analog2, var = 'protein')%>%
+    MM <- data_input%>%
+      tibble::rownames_to_column(var = 'protein')%>%
       filter(protein %in% protein_personalized)%>%
       tibble::column_to_rownames(var = 'protein')
   }
-  anno <- dplyr::select(sample_list, ID, class)
+  anno <- sample_list%>%
+    dplyr::select(SampleID, condition = category)
   data4model <- data.frame(t(MM))%>%
-    tibble::rownames_to_column(var = 'ID')%>%
-    inner_join(anno, by = 'ID')%>%
-    dplyr::select(class = last_col(), everything(),
-                  -ID)%>%
-    mutate(class = as.factor(as.character(class)))
+    tibble::rownames_to_column(var = 'SampleID')%>%
+    inner_join(anno, by = 'SampleID')%>%
+    dplyr::select(
+      condition, everything(),
+      -SampleID
+    )%>%
+    mutate(condition = as.factor(as.character(condition)))
   # time consuming
-  leapsReg <<- regsubsets(class ~ ., data4model, nvmax = 10)
+  leapsReg <<- regsubsets(condition ~ ., data4model, nvmax = 10, really.big = T)
   summary(leapsReg)
 }
 # leaps plot
 # model_input = leapsReg
-ModPlot <- function(model_input = leapsReg){
-  plot(model_input, scale = "adjr2")
+Mod.Plot <- function(model_input = leapsReg){
+  model_input%>%
+    plot(scale = "adjr2")
 }
 # model evaluate (ROC): variables from 2 to 10
-# default parameter: datainput = Analog2, annotation = sample_list, predictor = 10, object = c('A_BL', 'B_PR'), type = 'data|plot|ROCpar', class = 'Group|Subgroup1|Subgroup2|NULL'
-pred4ROC <- function(datainput = Analog2, annotation = sample_list, predictor, object, type = 'NULL', class = 'NULL'){
+# default parameter: data_input = MatrixQ_log, annotation = sample_list, predictor = 10, object = c('A_BL', 'B_PR'), type = 'data|plot|ROCpar', category = 'Group|Subgroup1|Subgroup2|NULL'
+predict4ROC <- function(data_input = MatrixQ_log, annotation = sample_list, predictor, category = 'NULL', object, type = 'NULL'){
   # regression parameter
   coefficient <- coef(leapsReg, predictor)
   coef_protein <- names(coefficient)[-1]
   coef_value <- coefficient[-1]
   coef_inter <- coefficient[1]
   # regression calculation
-  MM <- datainput
-  anno <- dplyr::select(annotation, ID, class)
+  MM <- data_input
+  anno <- annotation%>%
+    dplyr::select(SampleID, category)
   data4model <- data.frame(t(MM))%>%
-    tibble::rownames_to_column(var = 'ID')%>%
-    inner_join(anno, by = 'ID')%>%
-    select(class = last_col(), everything())%>%
-    arrange(class)
-  data4cal <- dplyr::select(data4model, coef_protein)%>%
+    tibble::rownames_to_column(var = 'SampleID')%>%
+    inner_join(anno, by = 'SampleID')%>%
+    rename(condition = category)%>%
+    arrange(condition)
+  data4cal <- data4model%>%
+    dplyr::select(coef_protein)%>%
     as.matrix()
   data4ROC <- data.frame(
-    class = data4model$class,
-    Value = data4cal%*%coef_value,
+    condition = data4model$condition,
+    value = data4cal%*%coef_value,
     check.names = F)%>%
-    dplyr::mutate(Value = Value + coef_inter)
+    dplyr::mutate(value = value + coef_inter)
+  # ROC by condition
+  ROCbycondition <- data4ROC%>%
+    filter(condition %in% object)%>%
+    mutate(condition = as.character(condition))
+  # ROC model
+  ROC_model <- roc(ROCbycondition$condition ~ ROCbycondition$value, percent = T)
   if (type == 'data') {
     return(data4ROC)
   } else if (type == 'plot') {
-    ROCbyGroup <- filter(data4ROC, class %in% object)%>%
-      mutate(class = as.character(class))
-    Roc <- roc(ROCbyGroup$class ~ ROCbyGroup$Value, percent = T)
-    # predict by group (ROC)
-    aucValue <- auc(Roc)%>%
+    # predict by condition (ROC)
+    AUC_value <- auc(ROC_model)%>%
       as.numeric()%>%
       round(2)
-    ciValue <- ci(Roc)%>%
+    ci_value <- ci(ROC_model)%>%
       as.numeric()%>%
       round(2)
-    basicplot <- ggplot(ROCbyGroup, aes(d = class, m = Value)) +
+    basicplot <- ggplot(ROCbycondition, aes(d = condition, m = value)) +
       geom_roc() +
       theme_classic()
     ROCplot <- basicplot +
       geom_abline(intercept = 0, slope = 1, linetype = 'dashed', color = 'grey50') +
       annotate('text',
                x = 0.65, y = 0.45,
-               label = paste0('AUC: ', aucValue, '%', ' (', ciValue[1], '%-', ciValue[3], '%)'))
+               label = paste0('AUC: ', AUC_value, '%', ' (', ci_value[1], '%-', ci_value[3], '%)'))
     return(ROCplot)
   } else if (type == 'ROCpar') {
-    ROCbyGroup <- filter(data4ROC, class %in% object)%>%
-      mutate(class = as.character(class))
-    Roc <- roc(ROCbyGroup$class ~ ROCbyGroup$Value, percent=TRUE)
     # ROC
-    roc_parameter <- coords(Roc, "best", ret = "all", transpose = F)
+    roc_parameter <- coords(ROC_model, "best", ret = "all", transpose = F)
     return(roc_parameter)
   } else if (type == 'box') {
-    ggplot(data4ROC, aes(class, Value)) +
+    ggplot(data4ROC, aes(condition, value, color = condition)) +
       geom_boxplot() +
       geom_jitter(height = 0, width = 0.3) +
-      theme_classic() +
+      theme_minimal() +
+      theme(legend.position = 'none') +
+      scale_color_brewer(palette = 'Set1') +
       labs(x = NULL,
            y = 'ROC signal')
   } else {cat("The value for the parameter 'type' is incorrect!\nPlease choose one of the following: 'data, plot'.")}
 }
+
+# model construction and evaluation (personalized) ------------------------
 # model evaluate (ROC): personalized
-# default parameter: data_input = Analog2, annotation = sample_list, protein_candidate = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), class = 'Group|Subgroup1|Subgroup2|NULL', type = 'plot|data'
-AUC_personalized <- function(data_input = Analog2, annotation = sample_list, object, protein_candidate = 'NULL', class = 'NULL', type = 'NULL'){
-  anno <- dplyr::select(annotation, ID, class)%>%
-    select(class = last_col(), everything())
+# default parameter: data_input = MatrixQ_log, annotation = sample_list, protein_candidate = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), class = 'Group|Subgroup1|Subgroup2|NULL', type = 'plot|data'
+AUC.personalized.single <- function(data_input = MatrixQ_log, annotation = sample_list, protein_candidate = 'NULL', category, object, type = 'NULL'){
+  anno <- annotation%>%
+    dplyr::select(SampleID, category)%>%
+    rename(condition = category)
   MM <- data_input
   df4ROC_personalized <- data.frame(t(MM), check.names = F)%>%
     select(one_of(protein_candidate))%>%
-    tibble::rownames_to_column(var = 'ID')%>%
-    inner_join(anno, by = 'ID')%>%
-    filter(class %in% object)%>%
-    select(-ID)
+    tibble::rownames_to_column(var = 'SampleID')%>%
+    inner_join(anno, by = 'SampleID')%>%
+    filter(condition %in% object)%>%
+    select(-SampleID)
   if (type == 'plot') {
-    gather(df4ROC_personalized, Protein, value, -class)%>%
-      ggplot(aes(d = class, m = value, color = Protein)) +
+    df4ROC_personalized%>%
+      gather(Protein, value, -condition)%>%
+      ggplot(aes(d = condition, m = value, color = Protein)) +
       geom_roc(n.cuts = 0) +
       geom_abline(intercept = 0, slope = 1, linetype = 'dashed', color = 'grey50') +
       theme_classic() +
@@ -644,39 +657,39 @@ AUC_personalized <- function(data_input = Analog2, annotation = sample_list, obj
   } else if (type == 'data') {
     AUC_pers <- data.frame(Protein = NA, AUC = NA)
     for (i in 1:(ncol(df4ROC_personalized)-1)) {
-      Roc <- roc(df4ROC_personalized[, ncol(df4ROC_personalized)] ~ df4ROC_personalized[,i], percent = TRUE)
-      aucValue <- auc(Roc)%>%
+      ROC <- roc(df4ROC_personalized[, ncol(df4ROC_personalized)] ~ df4ROC_personalized[,i], percent = TRUE)
+      AUC_value <- auc(ROC)%>%
         as.numeric()%>%
         round(2)
-      aucName <- colnames(df4ROC_personalized)[i]
-      AUC_pers[i, 1] <- aucName
-      AUC_pers[i, 2] <- paste0(aucValue, '%')
+      AUC_name <- colnames(df4ROC_personalized)[i]
+      AUC_pers[i, 1] <- AUC_name
+      AUC_pers[i, 2] <- paste0(AUC_value, '%')
       AUC_pers <<- AUC_pers
       # best ROC
-      roc_parameter <- coords(Roc, "best", ret = "all", transpose = F)
-      print(aucName)
+      roc_parameter <- coords(ROC, "best", ret = "all", transpose = F)
+      print(AUC_name)
       print(roc_parameter)
     }
     return(AUC_pers)
   }
 }
 # model evaluate (ROC): combind plot
-# default parameter: data_input = Analog2, annotation = sample_list, protein_candidate = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), class = 'Group|Subgroup1|Subgroup2|NULL', type = 'data|plot'
-AUC_combind_plot <- function(data_input = Analog2, annotation = sample_list, object, protein_candidate = 'NULL', class = 'NULL', type = 'NULL'){
+# default parameter: data_input = MatrixQ_log, annotation = sample_list, protein_candidate = c('glypican-3', 'CEA', 'VEGFR2', 'CD133'), category = 'Group|Subgroup1|Subgroup2|NULL', object, type = 'data|plot'
+AUC.combind.plot <- function(data_input = MatrixQ_log, annotation = sample_list, protein_candidate = 'NULL', category = 'NULL', object, type = 'NULL'){
   # single protein
-  anno <- dplyr::select(annotation, ID, class)%>%
-    select(class = last_col(), everything())
+  anno <- annotation%>%
+    dplyr::select(SampleID, category)%>%
+    rename(condition = category)
   MM <- data_input
   df4ROC_personalized <- data.frame(t(MM), check.names = F)%>%
     select(one_of(protein_candidate))%>%
-    tibble::rownames_to_column(var = 'ID')%>%
-    inner_join(anno, by = 'ID')
+    tibble::rownames_to_column(var = 'SampleID')%>%
+    inner_join(anno, by = 'SampleID')
   # multiple protein
   data4model <- data.frame(t(MM))%>%
-    tibble::rownames_to_column(var = 'ID')%>%
-    inner_join(anno, by = 'ID')%>%
-    select(class = last_col(), everything())%>%
-    arrange(class)
+    tibble::rownames_to_column(var = 'SampleID')%>%
+    inner_join(anno, by = 'SampleID')%>%
+    arrange(condition)
   data4ROC <- matrix(nrow = nrow(df4ROC_personalized))%>%
     as.data.frame()
   pre_num <- length(protein_candidate)
@@ -686,24 +699,26 @@ AUC_combind_plot <- function(data_input = Analog2, annotation = sample_list, obj
     coef_value <- coefficient[-1]
     coef_inter <- coefficient[1]
     # regression calculation
-    data4cal <- dplyr::select(data4model, coef_protein)%>%
+    data4cal <- data4model%>%
+      dplyr::select(coef_protein)%>%
       as.matrix()
     data4ROC_single <- data.frame(
-      Value = data4cal%*%coef_value,
+      value = data4cal%*%coef_value,
       check.names = F)%>%
-      dplyr::mutate(Value = Value + coef_inter)
+      dplyr::mutate(value = value + coef_inter)
     names(data4ROC_single) <- paste(coef_protein, collapse = '+')
     data4ROC <- bind_cols(data4ROC, data4ROC_single)
   }
   data4ROC <- select(data4ROC, -V1)
-  data4ROC$ID <- data4model$ID
+  data4ROC$SampleID <- data4model$SampleID
   # combined plot
-  df4ROC_combined <- inner_join(data4ROC, df4ROC_personalized, by = 'ID')%>%
-    filter(class %in% object)%>%
-    select(-ID)
+  df4ROC_combined <- inner_join(data4ROC, df4ROC_personalized, by = 'SampleID')%>%
+    filter(condition %in% object)%>%
+    select(-SampleID)
   if (type == 'plot') {
-    gather(df4ROC_combined, Protein, value, -class)%>%
-      ggplot(aes(d = class, m = value, color = Protein)) +
+    df4ROC_combined%>%
+      gather(Protein, value, -condition)%>%
+      ggplot(aes(d = condition, m = value, color = Protein)) +
       geom_roc(n.cuts = 0) +
       geom_abline(intercept = 0, slope = 1, linetype = 'dashed', color = 'grey50') +
       theme_classic() +
@@ -711,17 +726,17 @@ AUC_combind_plot <- function(data_input = Analog2, annotation = sample_list, obj
   } else if (type == 'data') {
     AUC_coms <- data.frame(Protein = NA, AUC = NA)
     for (i in 1:(ncol(df4ROC_combined)-1)) {
-      Roc <- roc(df4ROC_combined[, ncol(df4ROC_combined)] ~ df4ROC_combined[,i], percent = TRUE)
-      aucValue <- auc(Roc)%>%
+      ROC <- roc(df4ROC_combined[, ncol(df4ROC_combined)] ~ df4ROC_combined[,i], percent = TRUE)
+      AUC_value <- auc(ROC)%>%
         as.numeric()%>%
         round(2)
-      aucName <- colnames(df4ROC_combined)[i]
-      AUC_coms[i, 1] <- aucName
-      AUC_coms[i, 2] <- paste0(aucValue, '%')
+      AUC_name <- colnames(df4ROC_combined)[i]
+      AUC_coms[i, 1] <- AUC_name
+      AUC_coms[i, 2] <- paste0(AUC_value, '%')
       AUC_coms <<- AUC_coms
       # best ROC
-      roc_parameter <- coords(Roc, "best", ret = "all", transpose = F)
-      print(aucName)
+      roc_parameter <- coords(ROC, "best", ret = "all", transpose = F)
+      print(AUC_name)
       print(roc_parameter)
     }
     return(AUC_coms)
@@ -731,56 +746,56 @@ AUC_combind_plot <- function(data_input = Analog2, annotation = sample_list, obj
 # multiple regression (multiple categroy) ---------------------------------
 # multiple regression analysis
 # default parameter: group = c('Group', 'Subgroup1', 'Subgroup2')
-multireg_analysis <- function(data_input = Analog2, annotation = sample_list, group = 'NULL'){
-  group_name <- group
-  anno <- annotation%>%
-    select(ID, group_name)
-  df_anno <- data_input%>%
-    t()%>%
-    as.data.frame()%>%
-    tibble::rownames_to_column(var = 'ID')%>%
-    tbl_df()%>%
-    left_join(anno, by = 'ID')%>%
-    select(group_name, everything(),
-           -ID)
-  group_number <- length(group_name)
-  mulregressoin <<- matrix(ncol = 1 + group_number, nrow = 0)%>%
-    as.data.frame()
-  colnames(mulregressoin) <<- c('protein', group_name)
-  for (i in (group_number+1):length(df_anno)) {
-    df4avo <- select(df_anno, 1:3, i)
-    protein4test <- colnames(df_anno)[i]
-    fit <- aov(as.formula(paste(protein4test, '.', sep = " ~ ")), data = df4avo)
-    p.table <- summary(fit)[[1]]%>%
-      as.data.frame()%>%
-      tibble::rownames_to_column(var = 'group')%>%
-      mutate(group = str_trim(group))
-    rowID <- i-group_number
-    mulregressoin[rowID,1] <<- protein4test
-    mulregressoin[rowID,2] <<- p.table%>%
-      filter(group == group_name[1])%>%
-      .[6]
-    mulregressoin[rowID,3] <<- p.table%>%
-      filter(group == group_name[2])%>%
-      .[6]
-    mulregressoin[rowID,4] <<- p.table%>%
-      filter(group == group_name[3])%>%
-      .[6]
-  }
-  return(mulregressoin)
-}
+# multireg_analysis <- function(data_input = Analog2, annotation = sample_list, group = 'NULL'){
+#   group_name <- group
+#   anno <- annotation%>%
+#     select(ID, group_name)
+#   df_anno <- data_input%>%
+#     t()%>%
+#     as.data.frame()%>%
+#     tibble::rownames_to_column(var = 'ID')%>%
+#     tbl_df()%>%
+#     left_join(anno, by = 'ID')%>%
+#     select(group_name, everything(),
+#            -ID)
+#   group_number <- length(group_name)
+#   mulregressoin <<- matrix(ncol = 1 + group_number, nrow = 0)%>%
+#     as.data.frame()
+#   colnames(mulregressoin) <<- c('protein', group_name)
+#   for (i in (group_number+1):length(df_anno)) {
+#     df4avo <- select(df_anno, 1:3, i)
+#     protein4test <- colnames(df_anno)[i]
+#     fit <- aov(as.formula(paste(protein4test, '.', sep = " ~ ")), data = df4avo)
+#     p.table <- summary(fit)[[1]]%>%
+#       as.data.frame()%>%
+#       tibble::rownames_to_column(var = 'group')%>%
+#       mutate(group = str_trim(group))
+#     rowID <- i-group_number
+#     mulregressoin[rowID,1] <<- protein4test
+#     mulregressoin[rowID,2] <<- p.table%>%
+#       filter(group == group_name[1])%>%
+#       .[6]
+#     mulregressoin[rowID,3] <<- p.table%>%
+#       filter(group == group_name[2])%>%
+#       .[6]
+#     mulregressoin[rowID,4] <<- p.table%>%
+#       filter(group == group_name[3])%>%
+#       .[6]
+#   }
+#   return(mulregressoin)
+# }
 # multiple regression pvalue plot
-mulregressoin_pvalue <- function(data_input = mulregressoin, pvalue = 0.05){
-  data_input%>%
-    gather(group, value, -protein)%>%
-    mutate(ln = -log(value),
-           label = case_when(value < pvalue ~ protein))%>%
-    ggplot(aes(group, ln, color = group)) +
-    geom_jitter(height = 0) +
-    geom_hline(yintercept = -log(pvalue), color = 'grey50', linetype = 'dashed') +
-    theme_test() +
-    theme(legend.position = 'none') +
-    scale_color_brewer(palette = 'Set1') +
-    labs(x = NULL,
-         y = '-ln(protein)')
-}
+# mulregressoin_pvalue <- function(data_input = mulregressoin, pvalue = 0.05){
+#   data_input%>%
+#     gather(group, value, -protein)%>%
+#     mutate(ln = -log(value),
+#            label = case_when(value < pvalue ~ protein))%>%
+#     ggplot(aes(group, ln, color = group)) +
+#     geom_jitter(height = 0) +
+#     geom_hline(yintercept = -log(pvalue), color = 'grey50', linetype = 'dashed') +
+#     theme_test() +
+#     theme(legend.position = 'none') +
+#     scale_color_brewer(palette = 'Set1') +
+#     labs(x = NULL,
+#          y = '-ln(protein)')
+# }
