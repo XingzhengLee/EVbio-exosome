@@ -436,16 +436,17 @@ PCAdeep <- function(data_input = MatrixQ_log, type = 'NULL', group = 'NULL'){
 # sub group ---------------------------------------------------------------
 # defaule parameters: data_input = MatrixQ_log, annotation = sample_list, category_main = 'Group', object_main = c('SD', 'BL')
 Matrix.sub <- function(data_input = MatrixQ_log, annotation = sample_list, category_main, object_main){
-  # add condition annotation
-  annotation <- annotation%>%
+  annotation_sub <- annotation%>%
     dplyr::select(SampleID, condition = category_main)%>%
     dplyr::filter(condition %in% object_main)%>%
     distinct(SampleID, .keep_all = T)%>%
     filter(SampleID != 'PBS')
   # subset
-  ID_sub <- annotation$SampleID
+  ID <- colnames(data_input)
+  ID_sub <- annotation_sub$SampleID
+  ID4join <- intersect(ID, ID_sub)
   MatrixQ_sub <<- data_input%>%
-    dplyr::select(ID_sub)
+    dplyr::select(ID4join)
   return(MatrixQ_sub)
 }
 
