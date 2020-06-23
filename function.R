@@ -13,6 +13,8 @@ library(leaps)
 library(plotROC)
 library(pROC)
 library(sva)
+library(survival)
+library(survminer)
 
 # input -------------------------------------------------------------------
 # defaule parameters: quantification_file = 'Quantification.txt', protein_file = 'Protein.list.txt', sample_file = 'Sample.list.txt', fluorescence_label = '635'
@@ -758,4 +760,58 @@ AUC.combind.plot <- function(data_input = MatrixQ_log, annotation = sample_list,
     }
     return(AUC_coms)
   }
+}
+
+# Survival analysis for proteins ------------------------------------------
+# defaule parameters: data_input = MatrixQ_log, PFS_info = sample_list, protein_name, plot_type = 'full|mini'
+PFS4protein <- function(data_input = MatrixQ_log, PFS_info = sample_list, protein_name, plot_type){
+  # subset protein
+  protein4pfs <- as.data.frame(t(data_input))%>%
+    select(protein_name)%>%
+    tibble::rownames_to_column(var = 'SampleID')%>%
+    rename(protein_value = protein_name)
+  # protein median value
+  med <- median(protein4pfs$protein_value)
+  # condition based on median value
+  protein4condition <- protein4pfs%>%
+    mutate(
+      protein_condition = case_when(
+        protein_value < med ~ 1,
+        protein_value >= med ~ 2
+      )
+    )
+  # join pfs information with protein value
+  list4pfs <- PFS_info%>%
+    inner_join(protein4condition, by = 'SampleID')%>%
+    mutate(
+      PFS = as.numeric(PFS),
+      status = 1
+    )
+  # fit pfs module
+  fit <- survminer::surv_fit(Surv(PFS, status) ~ protein_condition, data = list4pfs)
+  # plot pfs module
+  if (plot_type == 'full') {
+    gg4pfs <- ggsurvplot(fit,
+                         pval = TRUE, conf.int = TRUE,
+                         risk.table = TRUE, # Add risk table
+                         risk.table.col = "strata", # Change risk table color by groups
+                         linetype = "strata", # Change line type by groups
+                         surv.median.line = "hv", # Specify median survival
+                         ggtheme = theme_bw(), # Change ggplot2 theme
+                         palette = c("#E7B800", "#2E9FDF")
+    )
+  } else if (plot_type == 'mini') {
+    gg4pfs <- ggsurvplot(
+      fit,
+      pval = TRUE, conf.int = TRUE,
+      risk.table.col = "strata", # Change risk table color by groups
+      linetype = "strata", # Change line type by groups
+      surv.median.line = "hv", # Specify median survival
+      ggtheme = theme_bw(), # Change ggplot2 theme
+      palette = c("#E7B800", "#2E9FDF")
+    )
+  }
+  # pfs results
+  surv_diff <- survdiff(Surv(PFS, status) ~ protein_condition, data = list4pfs)
+  return(gg4pfs)
 }
