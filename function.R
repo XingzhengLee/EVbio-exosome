@@ -763,8 +763,8 @@ AUC.combind.plot <- function(data_input = MatrixQ_log, annotation = sample_list,
 }
 
 # Survival analysis for proteins ------------------------------------------
-# defaule parameters: data_input = MatrixQ_log, PFS_info = sample_list, protein_name, plot_type = 'full|mini'
-PFS4protein <- function(data_input = MatrixQ_log, PFS_info = sample_list, protein_name, plot_type){
+# defaule parameters: data_input, PFS_info = sample_list, protein_name, plot_type = 'full|mini'
+PFS4protein <- function(data_input, PFS_info = sample_list, protein_name, plot_type){
   # subset protein
   protein4pfs <- as.data.frame(t(data_input))%>%
     select(protein_name)%>%
@@ -776,8 +776,8 @@ PFS4protein <- function(data_input = MatrixQ_log, PFS_info = sample_list, protei
   protein4condition <- protein4pfs%>%
     mutate(
       protein_condition = case_when(
-        protein_value < med ~ 1,
-        protein_value >= med ~ 2
+        protein_value <= med ~ 1,
+        protein_value > med ~ 2
       )
     )
   # join pfs information with protein value
