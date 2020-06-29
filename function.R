@@ -776,6 +776,7 @@ PFS4protein <- function(data_input, PFS_info = sample_list, protein_name, plot_t
   protein4condition <- protein4pfs%>%
     mutate(
       protein_condition = case_when(
+        # use <= to avoid errors caused by to many zeros
         protein_value <= med ~ 1,
         protein_value > med ~ 2
       )
