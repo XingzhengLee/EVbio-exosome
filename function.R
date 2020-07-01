@@ -685,7 +685,7 @@ AUC.personalized.single <- function(data_input = MatrixQ_log, annotation = sampl
       AUC_pers[i, 2] <- paste0(AUC_value, '%')
       AUC_pers <<- AUC_pers
       # best ROC
-      roc_parameter <- coords(ROC, "best", ret = "all", transpose = F)
+      roc_parameter <<- coords(ROC, "best", ret = "all", transpose = F)
       print(AUC_name)
       print(roc_parameter)
     }
