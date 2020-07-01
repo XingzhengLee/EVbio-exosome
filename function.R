@@ -764,21 +764,25 @@ AUC.combind.plot <- function(data_input = MatrixQ_log, annotation = sample_list,
 
 # Survival analysis for proteins ------------------------------------------
 # defaule parameters: data_input, PFS_info = sample_list, protein_name, plot_type = 'full|mini'
-PFS4protein <- function(data_input, PFS_info = sample_list, protein_name, plot_type){
+PFS4protein <- function(data_input, PFS_info = sample_list, protein_name, method, plot_type){
   # subset protein
   protein4pfs <- as.data.frame(t(data_input))%>%
     select(protein_name)%>%
     tibble::rownames_to_column(var = 'SampleID')%>%
     rename(protein_value = protein_name)
-  # protein median value
-  med <- median(protein4pfs$protein_value)
+  if (method == 'median') {
+    # protein median value
+    cut_off <- median(protein4pfs$protein_value)
+  } else if (method == 'ROC') {
+    cut_off <- roc_parameter[1,1]
+  }
   # condition based on median value
   protein4condition <- protein4pfs%>%
     mutate(
       protein_condition = case_when(
         # use <= to avoid errors caused by to many zeros
-        protein_value <= med ~ 1,
-        protein_value > med ~ 2
+        protein_value <= cut_off ~ 1,
+        protein_value > cut_off ~ 2
       )
     )
   # join pfs information with protein value
