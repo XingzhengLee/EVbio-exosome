@@ -763,7 +763,7 @@ AUC.combind.plot <- function(data_input = MatrixQ_log, annotation = sample_list,
 }
 
 # Survival analysis for proteins ------------------------------------------
-# defaule parameters: data_input, PFS_info = sample_list, protein_name, plot_type = 'full|mini'
+# defaule parameters: data_input, PFS_info = sample_list, protein_name, method = 'median|ROC', plot_type = 'full|mini'
 PFS4protein <- function(data_input, PFS_info = sample_list, protein_name, method, plot_type){
   # subset protein
   protein4pfs <- as.data.frame(t(data_input))%>%
@@ -803,7 +803,7 @@ PFS4protein <- function(data_input, PFS_info = sample_list, protein_name, method
                          linetype = "strata", # Change line type by groups
                          surv.median.line = "hv", # Specify median survival
                          ggtheme = theme_bw(), # Change ggplot2 theme
-                         palette = c("#E7B800", "#2E9FDF")
+                         palette = 'jco'
     )
   } else if (plot_type == 'mini') {
     gg4pfs <- ggsurvplot(
@@ -813,10 +813,16 @@ PFS4protein <- function(data_input, PFS_info = sample_list, protein_name, method
       linetype = "strata", # Change line type by groups
       surv.median.line = "hv", # Specify median survival
       ggtheme = theme_bw(), # Change ggplot2 theme
-      palette = c("#E7B800", "#2E9FDF")
+      palette = 'jco'
     )
   }
   # pfs results
   surv_diff <- survdiff(Surv(PFS, status) ~ protein_condition, data = list4pfs)
+  # pvalue & hazard_ratios
+  p_value <<- 1 - pchisq(surv_diff$chisq, length(surv_diff$n) - 1)
+  hazard_ratio <<- coxph(Surv(PFS, status) ~ protein_condition, data = list4pfs)%>% 
+    gtsummary::tbl_regression(exp = TRUE)
   return(gg4pfs)
 }
+
+# Dynamic curve -----------------------------------------------------------
