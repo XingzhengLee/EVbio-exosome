@@ -826,3 +826,28 @@ PFS4protein <- function(data_input, PFS_info = sample_list, protein_name, method
 }
 
 # Dynamic curve -----------------------------------------------------------
+dynamic_curve <- function(data_input, protein, xlab, ylab, object){
+  trend <- t(data_input)%>%
+    as.data.frame()%>%
+    tibble::rownames_to_column(var = 'SampleID')%>%
+    tbl_df()%>%
+    select(SampleID, protein)%>%
+    rename(value = protein)%>%
+    left_join(sample_list, by = 'SampleID')%>%
+    rename(G1 = xlab, G2 = ylab)%>%
+    group_by(G1, G2)%>%
+    summarise(mean = mean(value), sd = sd(value))%>%
+    ungroup()
+  trend%>%
+    mutate(G1 = as.numeric(as.factor(G1)))%>%
+    ggplot(aes(G1, mean, color = G2)) +
+    geom_point(aes(shape = G2)) +
+    # geom_errorbar(aes(ymin = mean - sd, max = mean + sd), width = 0.1) +
+    geom_line() +
+    theme_classic() +
+    theme(legend.title = element_blank()) +
+    scale_color_brewer(palette = 'Set2') +
+    scale_x_continuous(breaks = 1:length(object), labels = object) +
+    labs(x = NULL,
+         y = paste('Exosomal', protein))
+}
