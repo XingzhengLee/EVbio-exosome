@@ -261,7 +261,7 @@ batch_adjust <- function(proein_expression = MatrixQ, phenotype = sample_list, t
 
 # error control -----------------------------------------------------------
 # the percentage of positive values
-# default parameter: data_input =  MatrixQ_adjusted
+# default parameter: data_input = MatrixQ_adjusted
 positive.percentage <- function(data_input =  MatrixQ_adjusted){
   # number of values above zero (percentage)
   Matrix_TF <- (data_input > 0)
